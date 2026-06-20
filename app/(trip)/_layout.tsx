@@ -1,7 +1,23 @@
 import { useEffect } from 'react'
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native'
 import { Tabs, router } from 'expo-router'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useStore } from '../../lib/store'
+
+function HomeIcon() {
+  return (
+    <View style={{ width: 20, height: 20, alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+      <View style={{ flexDirection: 'row', gap: 3 }}>
+        <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: '#6B6680' }} />
+        <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: '#6B6680' }} />
+      </View>
+      <View style={{ flexDirection: 'row', gap: 3 }}>
+        <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: '#6B6680' }} />
+        <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: '#6B6680' }} />
+      </View>
+    </View>
+  )
+}
 
 function FeedIcon({ focused }: { focused: boolean }) {
   const color = focused ? '#F5F3FA' : '#6B6680'
@@ -27,6 +43,9 @@ function StatsIcon({ focused }: { focused: boolean }) {
 
 export default function TripLayout() {
   const trip = useStore(s => s.trip)
+  const insets = useSafeAreaInsets()
+  // Extra space to add beyond the 20px already designed into the tab bar
+  const extraBottom = Math.max(0, insets.bottom - 20)
 
   useEffect(() => {
     if (!trip) {
@@ -40,7 +59,10 @@ export default function TripLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: [styles.tabBar, {
+          height: 80 + extraBottom,
+          paddingBottom: 20 + extraBottom,
+        }],
         tabBarBackground: () => (
           <View style={styles.tabBarBg} />
         ),
@@ -67,6 +89,22 @@ export default function TripLayout() {
             <Text style={[styles.tabLabel, focused ? styles.tabLabelActiveStats : styles.tabLabelInactive]}>
               Stats
             </Text>
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="home"
+        options={{
+          title: 'Trips',
+          tabBarButton: ({ style }) => (
+            <TouchableOpacity
+              style={style}
+              onPress={() => router.replace('/')}
+              activeOpacity={0.7}
+            >
+              <HomeIcon />
+              <Text style={[styles.tabLabel, styles.tabLabelInactive]}>Trips</Text>
+            </TouchableOpacity>
           ),
         }}
       />

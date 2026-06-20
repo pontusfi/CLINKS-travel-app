@@ -1,12 +1,14 @@
-import { useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Dimensions,
+  ActivityIndicator,
+  ScrollView,
 } from 'react-native'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import MaskedView from '@react-native-masked-view/masked-view'
 import Animated, {
@@ -19,18 +21,20 @@ import Animated, {
 } from 'react-native-reanimated'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useStore } from '../lib/store'
+import { supabase } from '../lib/supabase'
+import { getOrCreateDeviceId } from '../lib/utils'
+import type { Trip, TripUser } from '../lib/supabase'
 
 const { width } = Dimensions.get('window')
 
+type TripEntry = { trip: Trip; user: TripUser }
+
 export default function HomeScreen() {
   const trip = useStore(s => s.trip)
+  const setTrip = useStore(s => s.setTrip)
 
-  // Redirect to feed if already in a trip
-  useEffect(() => {
-    if (trip) {
-      router.replace('/(trip)/feed')
-    }
-  }, [trip])
+  const [trips, setTrips] = useState<TripEntry[]>([])
+  const [loading, setLoading] = useState(true)
 
   const floatY = useSharedValue(0)
   const pulseDot = useSharedValue(1)
@@ -59,46 +63,154 @@ export default function HomeScreen() {
   }))
   const dotStyle = useAnimatedStyle(() => ({ opacity: pulseDot.value }))
 
+  useFocusEffect(useCallback(() => {
+    let active = true
+    async function load() {
+      setLoading(true)
+      const deviceId = await getOrCreateDeviceId()
+      const { data } = await supabase
+        .from('trip_users')
+        .select('*, trips(*)')
+        .eq('device_id', deviceId)
+      if (!active) return
+      const entries: TripEntry[] = (data ?? [])
+        .filter((row: any) => row.trips?.active)
+        .map((row: any) => ({ trip: row.trips as Trip, user: row as TripUser }))
+      setTrips(entries)
+      setLoading(false)
+    }
+    load()
+    return () => { active = false }
+  }, []))
+
+  function enterTrip(entry: TripEntry) {
+    setTrip(entry.trip, entry.user)
+    router.replace('/(trip)/feed')
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator color="#9B5CFF" size="large" />
+      </View>
+    )
+  }
+
+  if (trips.length === 0) {
+    return (
+      <View style={styles.container}>
+        {/* Background glow blobs */}
+        <View style={[styles.blob, styles.blobTop]} />
+        <View style={[styles.blob, styles.blobBottom]} />
+
+        <SafeAreaView style={styles.safeArea}>
+          {/* Center content */}
+          <View style={styles.center}>
+            {/* Live pill */}
+            <View style={styles.livePill}>
+              <Animated.View style={[styles.liveDot, dotStyle]} />
+              <Text style={styles.livePillText}>1,204 PEOPLE DRINKING NOW</Text>
+            </View>
+
+            {/* Floating emoji */}
+            <Animated.Text style={[styles.heroEmoji, floatStyle]}>🍻</Animated.Text>
+
+            {/* CLINK gradient logo */}
+            <MaskedView
+              maskElement={
+                <Text style={styles.logoText}>CLINK</Text>
+              }
+            >
+              <LinearGradient
+                colors={['#C6B0FF', '#9B5CFF', '#FF3D8B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Text style={[styles.logoText, { opacity: 0 }]}>CLINK</Text>
+              </LinearGradient>
+            </MaskedView>
+
+            <Text style={styles.tagline}>
+              Log every round with your crew, in real time.{' '}
+              <Text style={styles.taglineHighlight}>No login — just your name.</Text>
+            </Text>
+          </View>
+
+          {/* Bottom CTA buttons */}
+          <View style={styles.buttons}>
+            <TouchableOpacity
+              onPress={() => router.push('/onboarding?mode=create')}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={['#9B5CFF', '#FF3D8B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.primaryButton}
+              >
+                <Text style={styles.primaryButtonText}>Create a trip</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.push('/onboarding?mode=join')}
+              style={styles.ghostButton}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.ghostButtonText}>Join with a code</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.footerCaption}>
+              PICK A NAME · SHARE A CODE · GO 🚀
+            </Text>
+          </View>
+        </SafeAreaView>
+      </View>
+    )
+  }
+
   return (
     <View style={styles.container}>
-      {/* Background glow blobs */}
       <View style={[styles.blob, styles.blobTop]} />
       <View style={[styles.blob, styles.blobBottom]} />
 
       <SafeAreaView style={styles.safeArea}>
-        {/* Center content */}
-        <View style={styles.center}>
-          {/* Live pill */}
-          <View style={styles.livePill}>
-            <Animated.View style={[styles.liveDot, dotStyle]} />
-            <Text style={styles.livePillText}>1,204 PEOPLE DRINKING NOW</Text>
-          </View>
-
-          {/* Floating emoji */}
-          <Animated.Text style={[styles.heroEmoji, floatStyle]}>🍻</Animated.Text>
-
-          {/* CLINK gradient logo */}
-          <MaskedView
-            maskElement={
-              <Text style={styles.logoText}>CLINK</Text>
-            }
-          >
-            <LinearGradient
-              colors={['#C6B0FF', '#9B5CFF', '#FF3D8B']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              <Text style={[styles.logoText, { opacity: 0 }]}>CLINK</Text>
-            </LinearGradient>
-          </MaskedView>
-
-          <Text style={styles.tagline}>
-            Log every round with your crew, in real time.{' '}
-            <Text style={styles.taglineHighlight}>No login — just your name.</Text>
+        <View style={styles.dashHeader}>
+          <Text style={styles.dashTitle}>Your trips</Text>
+          <Text style={styles.dashSubtitle}>
+            {trips.length} TRIP{trips.length !== 1 ? 'S' : ''}
           </Text>
         </View>
 
-        {/* Bottom CTA buttons */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.tripsList}
+          showsVerticalScrollIndicator={false}
+        >
+          {trips.map(entry => (
+            <TouchableOpacity
+              key={entry.trip.id}
+              onPress={() => enterTrip(entry)}
+              style={[
+                styles.tripCard,
+                trip?.id === entry.trip.id && styles.tripCardActive,
+              ]}
+              activeOpacity={0.8}
+            >
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={styles.tripCardName}>{entry.trip.name}</Text>
+                <Text style={styles.tripCardCode}>{entry.trip.invite_code}</Text>
+              </View>
+              <View style={{ alignItems: 'center', gap: 3 }}>
+                <Text style={{ fontSize: 28 }}>{entry.user.avatar_emoji}</Text>
+                {trip?.id === entry.trip.id && (
+                  <Text style={styles.tripCardActiveLabel}>ACTIVE</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
         <View style={styles.buttons}>
           <TouchableOpacity
             onPress={() => router.push('/onboarding?mode=create')}
@@ -121,10 +233,6 @@ export default function HomeScreen() {
           >
             <Text style={styles.ghostButtonText}>Join with a code</Text>
           </TouchableOpacity>
-
-          <Text style={styles.footerCaption}>
-            PICK A NAME · SHARE A CODE · GO 🚀
-          </Text>
         </View>
       </SafeAreaView>
     </View>
@@ -134,6 +242,12 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#0B0A12',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#0B0A12',
   },
   blob: {
@@ -146,7 +260,6 @@ const styles = StyleSheet.create({
     top: 40,
     left: -70,
     backgroundColor: 'rgba(155,92,255,0.3)',
-    // RN doesn't support CSS blur, using opacity for approximation
   },
   blobBottom: {
     bottom: 150,
@@ -158,6 +271,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 26,
     paddingBottom: 30,
   },
+  // Hero (empty state)
   center: {
     flex: 1,
     alignItems: 'center',
@@ -207,6 +321,58 @@ const styles = StyleSheet.create({
   taglineHighlight: {
     color: '#F5F3FA',
   },
+  // Dashboard
+  dashHeader: {
+    paddingTop: 8,
+    paddingBottom: 16,
+    gap: 3,
+  },
+  dashTitle: {
+    fontFamily: 'SpaceGrotesk_Bold',
+    fontSize: 28,
+    color: '#F5F3FA',
+  },
+  dashSubtitle: {
+    fontFamily: 'SpaceMono',
+    fontSize: 11,
+    color: '#6B6680',
+    letterSpacing: 0.6,
+  },
+  tripsList: {
+    gap: 10,
+    paddingBottom: 16,
+  },
+  tripCard: {
+    backgroundColor: '#15131D',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tripCardActive: {
+    borderColor: 'rgba(155,92,255,0.45)',
+    backgroundColor: 'rgba(155,92,255,0.08)',
+  },
+  tripCardName: {
+    fontFamily: 'SpaceGrotesk_Bold',
+    fontSize: 17,
+    color: '#F5F3FA',
+  },
+  tripCardCode: {
+    fontFamily: 'SpaceMono',
+    fontSize: 12,
+    color: '#6B6680',
+  },
+  tripCardActiveLabel: {
+    fontFamily: 'SpaceMono',
+    fontSize: 9,
+    color: '#9B5CFF',
+    letterSpacing: 0.5,
+  },
+  // Shared buttons
   buttons: {
     gap: 12,
   },

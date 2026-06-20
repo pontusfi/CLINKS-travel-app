@@ -19,13 +19,16 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated'
 import { BottomSheetModal } from '@gorhom/bottom-sheet'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { supabase, Drink, TripUser } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { FeedItem } from '../../components/FeedItem'
 import { LogDrinkSheet } from '../../components/LogDrinkSheet'
 
 export default function FeedScreen() {
+  const insets = useSafeAreaInsets()
+  const extraBottom = Math.max(0, insets.bottom - 20)
+
   const trip = useStore(s => s.trip)
   const currentUser = useStore(s => s.currentUser)
   const drinks = useStore(s => s.drinks)
@@ -202,7 +205,7 @@ export default function FeedScreen() {
           renderItem={({ item, index }) => (
             <FeedItem drink={item} users={tripUsers} index={index} />
           )}
-          contentContainerStyle={styles.feedList}
+          contentContainerStyle={[styles.feedList, { paddingBottom: 160 + extraBottom }]}
           ItemSeparatorComponent={() => <View style={{ height: 9 }} />}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
@@ -215,7 +218,7 @@ export default function FeedScreen() {
       </SafeAreaView>
 
       {/* FAB */}
-      <Animated.View style={[styles.fabWrapper, fabStyle]}>
+      <Animated.View style={[styles.fabWrapper, fabStyle, { bottom: 96 + extraBottom }]}>
         <TouchableOpacity
           onPress={() => sheetRef.current?.present()}
           activeOpacity={0.85}

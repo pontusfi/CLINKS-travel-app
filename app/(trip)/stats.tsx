@@ -8,7 +8,7 @@ import {
   Share,
   Dimensions,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useStore } from '../../lib/store'
 import { DRINK_CATEGORIES, DrinkCategory } from '../../constants/drinks'
@@ -23,6 +23,9 @@ const PARTY_HOURS = [18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5]
 const CHART_LABELS = ['6p', '8p', '10p', '12a', '2a', '4a'] // every other for space
 
 export default function StatsScreen() {
+  const insets = useSafeAreaInsets()
+  const extraBottom = Math.max(0, insets.bottom - 20)
+
   const trip = useStore(s => s.trip)
   const drinks = useStore(s => s.drinks)
   const tripUsers = useStore(s => s.tripUsers)
@@ -103,7 +106,7 @@ export default function StatsScreen() {
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 + extraBottom }]}
         >
           {/* Header */}
           <View style={styles.header}>

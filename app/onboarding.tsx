@@ -26,13 +26,16 @@ export default function OnboardingScreen() {
   const setTrip = useStore(s => s.setTrip)
 
   const [name, setName] = useState('')
+  const [tripName, setTripName] = useState('')
   const [avatar, setAvatar] = useState(AVATAR_OPTIONS[0])
   const [joinCode, setJoinCode] = useState('')
   const [generatedCode] = useState(() => generateInviteCode())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const canSubmit = name.trim().length > 0 && (isCreate || joinCode.length === 6)
+  const canSubmit =
+    name.trim().length > 0 &&
+    (isCreate ? tripName.trim().length > 0 : joinCode.length === 6)
 
   async function handleSubmit() {
     if (!canSubmit) return
@@ -47,7 +50,7 @@ export default function OnboardingScreen() {
         const { data: trip, error: tripErr } = await supabase
           .from('trips')
           .insert({
-            name: `${name.trim()}'s trip`,
+            name: tripName.trim(),
             invite_code: generatedCode,
             created_by: deviceId,
             active: true,
@@ -189,6 +192,22 @@ export default function OnboardingScreen() {
                 maxLength={20}
               />
             </View>
+
+            {/* Trip name input (create mode only) */}
+            {isCreate && (
+              <View style={styles.section}>
+                <Text style={styles.label}>TRIP NAME</Text>
+                <TextInput
+                  value={tripName}
+                  onChangeText={setTripName}
+                  placeholder="e.g. Barcelona 2026"
+                  placeholderTextColor="#5C5870"
+                  style={styles.input}
+                  autoCorrect={false}
+                  maxLength={40}
+                />
+              </View>
+            )}
 
             {/* Avatar picker */}
             <View style={styles.section}>
