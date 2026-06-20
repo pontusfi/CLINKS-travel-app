@@ -2,11 +2,13 @@
 
 # CLINK — Group Drink Tracker
 
-React Native + Expo SDK 56 app. No auth — users identify by device ID + display name.
+React Native + Expo SDK 54 app. No auth — users identify by device ID + display name.
 
 ## Stack
 
-- **Expo SDK 56** / **Expo Router v4** (file-based navigation, `expo-router/entry` entrypoint)
+- **Expo SDK 54** / **Expo Router v6** (file-based navigation, `expo-router/entry` entrypoint)
+- **React 19.1.0** / **React Native 0.81.5**
+- **react-native-reanimated ~4.1.1** + **react-native-worklets 0.5.1** (exact pin — see note below)
 - **NativeWind v4** + **Tailwind v3** — configured via `tailwind.config.js`, `babel.config.js`, `metro.config.js`, `global.css`
 - **Zustand v5** — store in `lib/store.ts`, persisted to AsyncStorage
 - **Supabase** — client in `lib/supabase.ts`, reads `EXPO_PUBLIC_SUPABASE_URL` + `EXPO_PUBLIC_SUPABASE_ANON_KEY` from `.env.local`
@@ -16,10 +18,24 @@ React Native + Expo SDK 56 app. No auth — users identify by device ID + displa
 ## Running
 
 ```
-npx expo start
+npx expo start --clear
 ```
 
+Use `--clear` after any dependency or babel config change to avoid stale bundler cache.
+
 Credentials go in `.env.local` (gitignored). Without them the app compiles but DB calls fail.
+
+### Installing packages
+
+Use `npx expo install <package>` (not plain `npm install`) so Expo resolves the SDK-compatible version. If plain `npm install` is needed, add `--legacy-peer-deps` due to a `react-dom` peer conflict in the tree.
+
+### ⚠️ react-native-worklets version lock
+
+`react-native-worklets` is pinned to exactly `0.5.1` in `package.json` (with a matching `"overrides"` entry). **Do not upgrade it.**
+
+Expo Go SDK 54 has `react-native-worklets@0.5.1` compiled into its native binary. The `installTurboModule` native API changed between 0.5.x and 0.8.x, so running a newer JS version against the Expo Go native module causes an immediate crash. If you need a newer version of worklets you must create a development build (`npx expo run:android` / `npx expo run:ios`) instead of using Expo Go.
+
+The babel plugin is `react-native-worklets/plugin` (not the old `react-native-reanimated/plugin`).
 
 ## Project structure
 
