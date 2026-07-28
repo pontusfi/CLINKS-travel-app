@@ -26,7 +26,10 @@ export default function Root({ children }: PropsWithChildren) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="CLINK" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+        {/* Expo injects a favicon.ico of its own from app.json's web.favicon;
+            this PNG is the crisper option modern browsers prefer. */}
+        <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
 
         {/* Link previews when the invite URL gets pasted into a group chat */}
         <meta property="og:title" content="CLINK" />

@@ -168,6 +168,31 @@ the realtime subscription also delivers the inserted row, and `addDrink` dedupes
 on id, so without replacing the `local-…` placeholder the feed shows the drink
 twice.
 
+## Icons
+
+All of them are generated from one geometric definition by
+`scripts/generate-icons.js` (`npm run icons`) — two glasses tilted into a clink
+with sparks, on the app gradient. It rasterises a normalised [0,1] description at
+2048px and downscales, so Jimp's bilinear filter does the anti-aliasing. The
+PNGs are committed; the build does not generate them.
+
+Outputs land in both `assets/` (Expo: app icon, favicon source, splash, Android
+adaptive layers) and `public/` (web: manifest icons, apple-touch-icon, favicon).
+Re-run it after any geometry change and commit the results.
+
+Two things it gets right that are easy to get wrong by hand:
+
+- **Maskable icons are a separate, more padded render.** Android crops them to a
+  circle of ~80% diameter. Declaring one full-bleed asset as `"any maskable"` —
+  which the manifest used to — clips the glass bases. There are now distinct
+  `icon-*.png` and `icon-maskable-*.png` entries.
+- **The favicon is padded further still and drawn on a rounded tile.** At the app
+  icon's scale the glasses run into the corners and merge into a blob at 16px.
+
+The script has a coverage smoke test that throws if the mark ends up outside
+15-27% of the tile, which catches geometry edits that silently draw nothing or
+fill everything.
+
 ## Design tokens
 
 | Token | Value |
