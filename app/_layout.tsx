@@ -1,6 +1,7 @@
 import '../global.css'
 import { useEffect } from 'react'
-import { Stack } from 'expo-router'
+import { View, ActivityIndicator } from 'react-native'
+import { Stack, useRouter, useSegments } from 'expo-router'
 import { StatusBar } from 'expo-status-bar'
 import * as SplashScreen from 'expo-splash-screen'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
@@ -17,12 +18,16 @@ import {
 } from '@expo-google-fonts/space-mono'
 import NetInfo from '@react-native-community/netinfo'
 import { useStore } from '../lib/store'
+import { supabase } from '../lib/supabase'
+import { cleanAuthUrl } from '../lib/auth'
 
 SplashScreen.preventAutoHideAsync()
 
 export default function RootLayout() {
   const setOffline = useStore(s => s.setOffline)
   const flushOfflineQueue = useStore(s => s.flushOfflineQueue)
+  const setSession = useStore(s => s.setSession)
+  const setAuthReady = useStore(s => s.setAuthReady)
 
   const [fontsLoaded] = useFonts({
     SpaceGrotesk: SpaceGrotesk_400Regular,
@@ -38,6 +43,24 @@ export default function RootLayout() {
     }
   }, [fontsLoaded])
 
+  // ── Auth session ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session)
+      setAuthReady(true)
+      cleanAuthUrl()
+    })
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      setAuthReady(true)
+      cleanAuthUrl()
+    })
+
+    return () => sub.subscription.unsubscribe()
+  }, [])
+
+  // ── Network ───────────────────────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(state => {
       const offline = !state.isConnected
@@ -55,8 +78,41 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <BottomSheetModalProvider>
         <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
+        <AuthGate />
       </BottomSheetModalProvider>
     </GestureHandlerRootView>
   )
+}
+
+/**
+ * Keeps the user on /sign-in until there's a session, and bounces them out of
+ * /sign-in once there is one.
+ */
+function AuthGate() {
+  const session = useStore(s => s.session)
+  const authReady = useStore(s => s.authReady)
+  const router = useRouter()
+  const segments = useSegments()
+
+  useEffect(() => {
+    if (!authReady) return
+
+    const onSignIn = segments[0] === 'sign-in'
+
+    if (!session && !onSignIn) {
+      router.replace('/sign-in')
+    } else if (session && onSignIn) {
+      router.replace('/')
+    }
+  }, [session, authReady, segments])
+
+  if (!authReady) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B0A12' }}>
+        <ActivityIndicator color="#9B5CFF" size="large" />
+      </View>
+    )
+  }
+
+  return <Stack screenOptions={{ headerShown: false, animation: 'fade' }} />
 }

@@ -16,14 +16,16 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { supabase } from '../lib/supabase'
 import { useStore } from '../lib/store'
-import { generateInviteCode, getOrCreateDeviceId } from '../lib/utils'
+import { generateInviteCode } from '../lib/utils'
 import { AVATAR_OPTIONS, AVATAR_BG_COLORS } from '../constants/drinks'
+import type { Trip, TripUser } from '../lib/supabase'
 
 export default function OnboardingScreen() {
   const { mode } = useLocalSearchParams<{ mode: 'create' | 'join' }>()
   const isCreate = mode === 'create'
 
   const setTrip = useStore(s => s.setTrip)
+  const session = useStore(s => s.session)
 
   const [name, setName] = useState('')
   const [tripName, setTripName] = useState('')
@@ -43,7 +45,11 @@ export default function OnboardingScreen() {
     setError('')
 
     try {
-      const deviceId = await getOrCreateDeviceId()
+      const userId = session?.user?.id
+      if (!userId) {
+        setError('Your session expired. Sign in again.')
+        return
+      }
 
       if (isCreate) {
         // Create trip
@@ -52,7 +58,8 @@ export default function OnboardingScreen() {
           .insert({
             name: tripName.trim(),
             invite_code: generatedCode,
-            created_by: deviceId,
+            created_by: userId,
+            owner_id: userId,
             active: true,
           })
           .select()
@@ -67,7 +74,7 @@ export default function OnboardingScreen() {
             trip_id: trip.id,
             display_name: name.trim(),
             avatar_emoji: avatar,
-            device_id: deviceId,
+            user_id: userId,
           })
           .select()
           .single()
@@ -77,44 +84,38 @@ export default function OnboardingScreen() {
         setTrip(trip, user)
         router.replace('/(trip)/feed')
       } else {
-        // Join trip by code
+        // Join by code. RLS hides trips you're not a member of, so this goes
+        // through a SECURITY DEFINER function that does the lookup server-side.
         const code = joinCode.trim().toUpperCase()
-        const { data: trip, error: tripErr } = await supabase
-          .from('trips')
-          .select()
-          .eq('invite_code', code)
-          .eq('active', true)
-          .single()
 
-        if (tripErr || !trip) {
+        const { data: trip, error: joinErr } = await supabase
+          .rpc('join_trip_by_code', {
+            p_code: code,
+            p_display_name: name.trim(),
+            p_avatar_emoji: avatar,
+          })
+          .single<Trip>()
+
+        if (joinErr) {
+          if (joinErr.message?.includes('TRIP_NOT_FOUND')) {
+            setError('Trip not found. Double-check the code.')
+            return
+          }
+          throw joinErr
+        }
+        if (!trip) {
           setError('Trip not found. Double-check the code.')
           return
         }
 
-        // Check if already in this trip on this device
-        const { data: existing } = await supabase
+        const { data: user, error: userErr } = await supabase
           .from('trip_users')
           .select()
           .eq('trip_id', trip.id)
-          .eq('device_id', deviceId)
-          .single()
+          .eq('user_id', userId)
+          .single<TripUser>()
 
-        let user = existing
-        if (!user) {
-          const { data: newUser, error: userErr } = await supabase
-            .from('trip_users')
-            .insert({
-              trip_id: trip.id,
-              display_name: name.trim(),
-              avatar_emoji: avatar,
-              device_id: deviceId,
-            })
-            .select()
-            .single()
-
-          if (userErr) throw userErr
-          user = newUser
-        }
+        if (userErr) throw userErr
 
         setTrip(trip, user)
         router.replace('/(trip)/feed')

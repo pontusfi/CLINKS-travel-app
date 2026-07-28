@@ -21,6 +21,9 @@ expo-env.d.ts
 # Metro
 .metro-health-check*
 
+# Vercel
+.vercel
+
 # debug
 npm-debug.*
 yarn-debug.*

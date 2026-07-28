@@ -22,7 +22,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { getOrCreateDeviceId } from '../lib/utils'
+import { signOut } from '../lib/auth'
 import type { Trip, TripUser } from '../lib/supabase'
 
 const { width } = Dimensions.get('window')
@@ -32,6 +32,8 @@ type TripEntry = { trip: Trip; user: TripUser }
 export default function HomeScreen() {
   const trip = useStore(s => s.trip)
   const setTrip = useStore(s => s.setTrip)
+  const session = useStore(s => s.session)
+  const reset = useStore(s => s.reset)
 
   const [trips, setTrips] = useState<TripEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,12 +68,16 @@ export default function HomeScreen() {
   useFocusEffect(useCallback(() => {
     let active = true
     async function load() {
+      const userId = session?.user?.id
+      if (!userId) {
+        setLoading(false)
+        return
+      }
       setLoading(true)
-      const deviceId = await getOrCreateDeviceId()
       const { data } = await supabase
         .from('trip_users')
         .select('*, trips(*)')
-        .eq('device_id', deviceId)
+        .eq('user_id', userId)
       if (!active) return
       const entries: TripEntry[] = (data ?? [])
         .filter((row: any) => row.trips?.active)
@@ -81,7 +87,12 @@ export default function HomeScreen() {
     }
     load()
     return () => { active = false }
-  }, []))
+  }, [session?.user?.id]))
+
+  async function handleSignOut() {
+    await signOut()
+    reset()
+  }
 
   function enterTrip(entry: TripEntry) {
     setTrip(entry.trip, entry.user)
@@ -132,7 +143,7 @@ export default function HomeScreen() {
 
             <Text style={styles.tagline}>
               Log every round with your crew, in real time.{' '}
-              <Text style={styles.taglineHighlight}>No login — just your name.</Text>
+              <Text style={styles.taglineHighlight}>Start a trip or join one.</Text>
             </Text>
           </View>
 
@@ -176,10 +187,15 @@ export default function HomeScreen() {
 
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.dashHeader}>
-          <Text style={styles.dashTitle}>Your trips</Text>
-          <Text style={styles.dashSubtitle}>
-            {trips.length} TRIP{trips.length !== 1 ? 'S' : ''}
-          </Text>
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text style={styles.dashTitle}>Your trips</Text>
+            <Text style={styles.dashSubtitle}>
+              {trips.length} TRIP{trips.length !== 1 ? 'S' : ''}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={handleSignOut} style={styles.signOutBtn} activeOpacity={0.7}>
+            <Text style={styles.signOutText}>Sign out</Text>
+          </TouchableOpacity>
         </View>
 
         <ScrollView
@@ -325,7 +341,21 @@ const styles = StyleSheet.create({
   dashHeader: {
     paddingTop: 8,
     paddingBottom: 16,
-    gap: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  signOutBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  signOutText: {
+    fontFamily: 'SpaceGrotesk_Medium',
+    fontSize: 13,
+    color: '#B6B0C8',
   },
   dashTitle: {
     fontFamily: 'SpaceGrotesk_Bold',
