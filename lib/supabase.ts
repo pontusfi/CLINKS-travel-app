@@ -35,7 +35,9 @@ export interface Event {
   created_by: string
   owner_id: string
   created_at: string
+  /** False once the owner closes it: read-only, and drinks_insert refuses. */
   active: boolean
+  closed_at: string | null
 }
 
 export interface EventUser {

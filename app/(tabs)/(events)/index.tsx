@@ -21,6 +21,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useStore } from '../../../lib/store'
+import { timeAgo } from '../../../lib/utils'
 import { supabase } from '../../../lib/supabase'
 import type { Event, EventUser } from '../../../lib/supabase'
 
@@ -43,6 +44,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [subtab, setSubtab] = useState<'active' | 'closed'>('active')
 
   const floatY = useSharedValue(0)
   const pulseDot = useSharedValue(1)
@@ -95,7 +97,7 @@ export default function HomeScreen() {
         return
       }
       const entries: EventEntry[] = (data ?? [])
-        .filter((row: any) => row.events?.active)
+        .filter((row: any) => !!row.events)
         .map((row: any) => ({ event: row.events as Event, user: row as EventUser }))
       setLoadError('')
       setEvents(entries)
@@ -104,6 +106,17 @@ export default function HomeScreen() {
     load()
     return () => { active = false }
   }, [session?.user?.id, reloadKey]))
+
+  const activeEvents = events.filter(e => e.event.active)
+  // Most recently ended first -- that's the one you're most likely looking for.
+  const closedEvents = events
+    .filter(e => !e.event.active)
+    .sort((a, b) =>
+      (b.event.closed_at ?? b.event.created_at).localeCompare(
+        a.event.closed_at ?? a.event.created_at,
+      ),
+    )
+  const shown = subtab === 'active' ? activeEvents : closedEvents
 
   function enterEvent(entry: EventEntry) {
     setEvent(entry.event, entry.user)
@@ -233,33 +246,69 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        <View style={styles.subtabs}>
+          <Subtab
+            label="Active"
+            count={activeEvents.length}
+            selected={subtab === 'active'}
+            onPress={() => setSubtab('active')}
+          />
+          <Subtab
+            label="Closed"
+            count={closedEvents.length}
+            selected={subtab === 'closed'}
+            onPress={() => setSubtab('closed')}
+          />
+        </View>
+
         <ScrollView
           style={{ flex: 1 }}
           contentContainerStyle={styles.eventsList}
           showsVerticalScrollIndicator={false}
         >
-          {events.map(entry => (
-            <TouchableOpacity
-              key={entry.event.id}
-              onPress={() => enterEvent(entry)}
-              style={[
-                styles.eventCard,
-                event?.id === entry.event.id && styles.eventCardActive,
-              ]}
-              activeOpacity={0.8}
-            >
-              <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.eventCardName}>{entry.event.name}</Text>
-                <Text style={styles.eventCardCode}>{entry.event.invite_code}</Text>
-              </View>
-              <View style={{ alignItems: 'center', gap: 3 }}>
-                <Text style={{ fontSize: 28 }}>{entry.user.avatar_emoji}</Text>
-                {event?.id === entry.event.id && (
-                  <Text style={styles.eventCardActiveLabel}>ACTIVE</Text>
-                )}
-              </View>
-            </TouchableOpacity>
-          ))}
+          {shown.length === 0 && (
+            <Text style={styles.subtabEmpty}>
+              {subtab === 'active'
+                ? 'No active events. Create one, or reopen a closed one.'
+                : 'Nothing closed yet. Events you end will land here.'}
+            </Text>
+          )}
+
+          {shown.map(entry => {
+            const closed = !entry.event.active
+            return (
+              <TouchableOpacity
+                key={entry.event.id}
+                onPress={() => enterEvent(entry)}
+                style={[
+                  styles.eventCard,
+                  closed && styles.eventCardClosed,
+                  !closed && event?.id === entry.event.id && styles.eventCardActive,
+                ]}
+                activeOpacity={0.8}
+              >
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={[styles.eventCardName, closed && styles.eventCardNameClosed]}>
+                    {entry.event.name}
+                  </Text>
+                  <Text style={styles.eventCardCode}>
+                    {closed && entry.event.closed_at
+                      ? 'ENDED ' + timeAgo(entry.event.closed_at).toUpperCase()
+                      : entry.event.invite_code}
+                  </Text>
+                </View>
+                <View style={{ alignItems: 'center', gap: 3 }}>
+                  <Text style={{ fontSize: 28, opacity: closed ? 0.45 : 1 }}>
+                    {entry.user.avatar_emoji}
+                  </Text>
+                  {!closed && event?.id === entry.event.id && (
+                    <Text style={styles.eventCardActiveLabel}>ACTIVE</Text>
+                  )}
+                  {closed && <Text style={styles.eventCardClosedLabel}>ENDED</Text>}
+                </View>
+              </TouchableOpacity>
+            )
+          })}
         </ScrollView>
 
         <View style={styles.buttons}>
@@ -287,6 +336,35 @@ export default function HomeScreen() {
         </View>
       </SafeAreaView>
     </View>
+  )
+}
+
+function Subtab({
+  label,
+  count,
+  selected,
+  onPress,
+}: {
+  label: string
+  count: number
+  selected: boolean
+  onPress: () => void
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.subtabItem, selected && styles.subtabItemSelected]}
+      activeOpacity={0.75}
+    >
+      <Text style={[styles.subtabText, selected && styles.subtabTextSelected]}>
+        {label}
+      </Text>
+      <View style={[styles.subtabBadge, selected && styles.subtabBadgeSelected]}>
+        <Text style={[styles.subtabBadgeText, selected && styles.subtabBadgeTextSelected]}>
+          {count}
+        </Text>
+      </View>
+    </TouchableOpacity>
   )
 }
 
@@ -390,6 +468,65 @@ const styles = StyleSheet.create({
     color: '#6B6680',
     letterSpacing: 0.6,
   },
+  subtabs: {
+    flexDirection: 'row',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 14,
+    padding: 4,
+    marginBottom: 12,
+  },
+  subtabItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  subtabItemSelected: {
+    backgroundColor: 'rgba(155,92,255,0.22)',
+  },
+  subtabText: {
+    fontFamily: 'SpaceGrotesk_Medium',
+    fontSize: 14,
+    color: '#B6B0C8',
+  },
+  subtabTextSelected: {
+    fontFamily: 'SpaceGrotesk_Bold',
+    color: '#F5F3FA',
+  },
+  subtabBadge: {
+    minWidth: 21,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    alignItems: 'center',
+  },
+  subtabBadgeSelected: {
+    backgroundColor: 'rgba(155,92,255,0.4)',
+  },
+  subtabBadgeText: {
+    fontFamily: 'SpaceMono',
+    fontSize: 11,
+    color: '#6B6680',
+  },
+  subtabBadgeTextSelected: {
+    color: '#F5F3FA',
+  },
+  subtabEmpty: {
+    fontFamily: 'SpaceGrotesk',
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#6B6680',
+    textAlign: 'center',
+    paddingVertical: 28,
+    paddingHorizontal: 24,
+  },
   eventsList: {
     gap: 10,
     paddingBottom: 16,
@@ -403,6 +540,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  eventCardClosed: {
+    backgroundColor: 'rgba(21,19,29,0.6)',
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  eventCardNameClosed: {
+    color: '#B6B0C8',
+  },
+  eventCardClosedLabel: {
+    fontFamily: 'SpaceMono',
+    fontSize: 9,
+    color: '#6B6680',
+    letterSpacing: 0.5,
   },
   eventCardActive: {
     borderColor: 'rgba(155,92,255,0.45)',

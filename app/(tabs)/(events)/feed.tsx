@@ -152,9 +152,9 @@ export default function FeedScreen() {
           <View>
             <Text style={styles.eventName}>{event.name}</Text>
             <View style={styles.livePill}>
-              <View style={styles.liveDot} />
+              <View style={[styles.liveDot, !event.active && styles.liveDotClosed]} />
               <Text style={styles.liveText}>
-                {eventUsers.length} here
+                {event.active ? `${eventUsers.length} here` : 'Ended'}
               </Text>
             </View>
           </View>
@@ -203,10 +203,12 @@ export default function FeedScreen() {
         {/* Feed header */}
         <View style={styles.feedHeader}>
           <Text style={styles.feedLabel}>LIVE FEED</Text>
-          <View style={styles.updatingBadge}>
-            <View style={styles.updatingDot} />
-            <Text style={styles.updatingText}>updating</Text>
-          </View>
+          {event.active && (
+            <View style={styles.updatingBadge}>
+              <View style={styles.updatingDot} />
+              <Text style={styles.updatingText}>updating</Text>
+            </View>
+          )}
         </View>
 
         {/* Feed list */}
@@ -228,24 +230,32 @@ export default function FeedScreen() {
         />
       </SafeAreaView>
 
-      {/* FAB */}
-      <Animated.View style={[styles.fabWrapper, fabStyle, { bottom: 96 + extraBottom }]}>
-        <TouchableOpacity
-          onPress={() => sheetRef.current?.present()}
-          activeOpacity={0.85}
-        >
-          <LinearGradient
-            colors={['#9B5CFF', '#FF3D8B']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.fab}
-          >
-            <Text style={styles.fabText}>＋ Log a drink</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </Animated.View>
+      {/* FAB — gone once the event is closed; drinks_insert would refuse anyway */}
+      {event.active ? (
+        <>
+          <Animated.View style={[styles.fabWrapper, fabStyle, { bottom: 96 + extraBottom }]}>
+            <TouchableOpacity
+              onPress={() => sheetRef.current?.present()}
+              activeOpacity={0.85}
+            >
+              <LinearGradient
+                colors={['#9B5CFF', '#FF3D8B']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.fab}
+              >
+                <Text style={styles.fabText}>＋ Log a drink</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </Animated.View>
 
-      <LogDrinkSheet ref={sheetRef} />
+          <LogDrinkSheet ref={sheetRef} />
+        </>
+      ) : (
+        <View style={[styles.closedBar, { bottom: 96 + extraBottom }]}>
+          <Text style={styles.closedBarText}>🏁 This event has ended</Text>
+        </View>
+      )}
     </View>
   )
 }
@@ -306,6 +316,26 @@ const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     backgroundColor: '#6BE58A',
+  },
+  liveDotClosed: {
+    backgroundColor: '#6B6680',
+  },
+  closedBar: {
+    position: 'absolute',
+    alignSelf: 'center',
+    paddingHorizontal: 22,
+    height: 48,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(21,19,29,0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  closedBarText: {
+    fontFamily: 'SpaceGrotesk_Medium',
+    fontSize: 14,
+    color: '#B6B0C8',
   },
   liveText: {
     fontFamily: 'SpaceMono',

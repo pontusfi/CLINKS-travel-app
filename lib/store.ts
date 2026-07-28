@@ -28,6 +28,8 @@ interface AppStore {
   eventUsers: EventUser[]
   setEvent: (event: Event, user: EventUser) => void
   setEventUsers: (users: EventUser[]) => void
+  /** Patches the active event in place — used when it's closed or reopened. */
+  updateEvent: (patch: Partial<Event>) => void
   clearEvent: () => void
 
   // ── Drinks ────────────────────────────────────────────────────────────────
@@ -93,6 +95,8 @@ export const useStore = create<AppStore>()(
 
       setEvent: (event, user) => set({ event, currentUser: user }),
       setEventUsers: (users) => set({ eventUsers: users }),
+      updateEvent: (patch) =>
+        set(state => (state.event ? { event: { ...state.event, ...patch } } : state)),
       clearEvent: () => set({ event: null, currentUser: null, eventUsers: [], drinks: [], offlineQueue: [] }),
 
       // ── Drinks ──────────────────────────────────────────────────────────
@@ -110,6 +114,10 @@ export const useStore = create<AppStore>()(
       logDrink: async ({ category, name = null, note = null }) => {
         const { event, currentUser, isOffline } = get()
         if (!event || !currentUser) return false
+        // A closed event refuses drinks server-side too (drinks_insert checks
+        // is_event_active), so without this the optimistic row would appear and
+        // then quietly fall into the offline queue to be rejected forever.
+        if (!event.active) return false
 
         const insert: DrinkInsert = {
           event_id: event.id,

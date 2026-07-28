@@ -63,7 +63,7 @@ app/
 components/
   LogDrinkSheet.tsx    # BottomSheetModal for logging drinks (+ preset quick-picks)
   DrinkCategoryPicker.tsx
-  EventNav.tsx         # Back button + Feed/Stats segmented control
+  EventNav.tsx         # Back + Feed/Stats switch + owner end/reopen (inline confirm)
   BackButton.tsx       # Back with a fallback route — router.back() no-ops on a fresh load
   FeedItem.tsx
   StatCard.tsx
@@ -72,6 +72,7 @@ lib/
   auth.ts              # signInWithGoogle, signOut, cleanAuthUrl
   profile.ts           # loadProfile (get-or-create), saveProfile, ageFromBirthYear
   presets.ts           # listPresets, createPreset, deletePreset
+  events.ts            # setEventActive (close / reopen)
   store.ts             # Zustand: session, authReady, profile, event, currentUser, eventUsers, drinks, offlineQueue, isOffline
   utils.ts             # generateInviteCode, timeAgo, getOrCreateDeviceId, formatHour, hexToRgba
 constants/
@@ -83,6 +84,7 @@ supabase/migrations/
   004_grants.sql       # table + function grants to `authenticated` (see grants note below)
   005_fix_select_policies.sql  # let owners see their own event / membership row
   006_drink_presets.sql # drink_presets table, grants, own-row RLS
+  007_close_events.sql # closed_at, is_event_active(), drinks blocked on closed events
 docs/
   GOOGLE_AUTH.md       # Google Cloud + Supabase dashboard setup
   DEPLOY.md            # Vercel deploy + env vars + PWA install
@@ -113,6 +115,25 @@ the button looks broken. `BackButton` takes a `fallback` route and uses
 ⚠️ **The tab bar is `position: absolute`,** so it floats over content. Any
 scrollable or bottom-anchored area has to reserve `80 + max(0, insets.bottom - 20)`
 or its last row hides underneath.
+
+## Closing an event
+
+`events.active` has been in the schema from the start; 007 made it mean
+something. The owner ends an event from `EventNav`, which sets `active = false`
+and stamps `closed_at`.
+
+A closed event is **read-only**: the feed hides the FAB and the log sheet,
+`store.logDrink()` refuses, and `drinks_insert` checks `is_event_active()` so a
+stale tab can't keep posting either. `join_event_by_code()` already skipped
+inactive events. Reopening clears `closed_at`.
+
+The events dashboard splits on this flag into **Active / Closed** subtabs.
+Closed events used to be filtered out of the query entirely — they're loaded now
+and partitioned client-side, sorted by `closed_at` descending.
+
+⚠️ Confirmation UI uses an **inline confirm row, not `Alert.alert`** —
+react-native-web doesn't implement Alert, and web is the primary target. Same
+applies anywhere else a confirm is needed.
 
 ## Drink presets
 
@@ -149,7 +170,7 @@ All styling uses `StyleSheet.create` (not NativeWind className). Gradients use `
 ## Supabase schema
 
 ```sql
-create table events (id uuid primary key default gen_random_uuid(), name text not null, invite_code text unique not null, created_by uuid not null, owner_id uuid references auth.users(id) on delete cascade, created_at timestamptz default now(), active boolean default true);
+create table events (id uuid primary key default gen_random_uuid(), name text not null, invite_code text unique not null, created_by uuid not null, owner_id uuid references auth.users(id) on delete cascade, created_at timestamptz default now(), active boolean default true, closed_at timestamptz);
 create table event_users (id uuid primary key default gen_random_uuid(), event_id uuid references events(id) on delete cascade, display_name text not null, avatar_emoji text not null, user_id uuid references auth.users(id) on delete cascade, device_id text, joined_at timestamptz default now());
 create table drinks (id uuid primary key default gen_random_uuid(), event_id uuid references events(id) on delete cascade, user_id uuid references event_users(id) on delete cascade, category text not null, name text, note text, logged_at timestamptz default now());
 create table profiles (id uuid primary key references auth.users(id) on delete cascade, display_name text not null default '', avatar_emoji text not null default '🦊', birth_year int, weight_kg numeric(5,1), height_cm int, sex text, created_at timestamptz default now(), updated_at timestamptz default now());
