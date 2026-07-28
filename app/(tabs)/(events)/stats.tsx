@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { useStore } from '../../../lib/store'
 import { DRINK_CATEGORIES, DrinkCategory } from '../../../constants/drinks'
 import { StatCard } from '../../../components/StatCard'
 import { formatHour } from '../../../lib/utils'
+import { canShareImage, shareStatsImage } from '../../../lib/shareCard'
 import { EventNav } from '../../../components/EventNav'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
@@ -38,6 +39,8 @@ export default function StatsScreen() {
   useEffect(() => {
     if (!event) router.replace('/')
   }, [event])
+
+  const [shareError, setShareError] = useState('')
 
   const stats = useMemo(() => {
     if (!drinks.length || !eventUsers.length) return null
@@ -88,7 +91,7 @@ export default function StatsScreen() {
     }
   }, [drinks, eventUsers])
 
-  async function handleShare() {
+  function shareAsText() {
     if (!event || !stats) return
     const lines = [
       `🍻 ${event.name} — CLINK Stats`,
@@ -103,7 +106,38 @@ export default function StatsScreen() {
       `📊 Top drink: ${stats.topCat?.emoji ?? ''} ${stats.topCat?.label ?? ''}`,
       `🔥 Peak hour: ${stats.peakLabel}`,
     ]
-    await Share.share({ message: lines.join('\n') })
+    Share.share({ message: lines.join('\n') })
+  }
+
+  // Not async, and deliberately so: navigator.share only works while the tap's
+  // user activation is live, and awaiting anything first spends it on Safari.
+  function handleShare() {
+    if (!event || !stats) return
+    setShareError('')
+
+    if (!canShareImage()) {
+      shareAsText()
+      return
+    }
+
+    try {
+      shareStatsImage({
+        eventName: event.name,
+        totalDrinks: stats.total,
+        leaderboard: stats.leaderboard.map(e => ({
+          emoji: e.user.avatar_emoji,
+          name: e.user.display_name,
+          count: e.count,
+        })),
+        topDrink: stats.topCat ? { emoji: stats.topCat.emoji, label: stats.topCat.label } : null,
+        peakHour: stats.peakLabel,
+        closed: !event.active,
+      })
+    } catch (e: any) {
+      // Falling back to text beats leaving them with nothing to share.
+      setShareError(e?.message ?? 'Could not make the image — shared as text instead.')
+      shareAsText()
+    }
   }
 
   if (!event) return null
@@ -119,13 +153,20 @@ export default function StatsScreen() {
         >
           <EventNav />
 
+          {!!shareError && <Text style={styles.shareError}>{shareError}</Text>}
+
           {/* Header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Stats</Text>
               <Text style={styles.subtitle}>{event.name} · live</Text>
             </View>
-            <TouchableOpacity onPress={handleShare} activeOpacity={0.8} style={styles.shareBtn}>
+            <TouchableOpacity
+              onPress={handleShare}
+              disabled={!stats}
+              activeOpacity={0.8}
+              style={[styles.shareBtn, !stats && { opacity: 0.4 }]}
+            >
               <LinearGradient
                 colors={['#9B5CFF', '#FF3D8B']}
                 start={{ x: 0, y: 0 }}
@@ -307,6 +348,11 @@ export default function StatsScreen() {
 }
 
 const styles = StyleSheet.create({
+  shareError: {
+    fontFamily: 'SpaceGrotesk',
+    fontSize: 12,
+    color: '#FF5C6E',
+  },
   container: { flex: 1, backgroundColor: '#0B0A12' },
   safeArea: { flex: 1 },
   scrollContent: {

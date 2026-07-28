@@ -73,6 +73,7 @@ lib/
   profile.ts           # loadProfile (get-or-create), saveProfile, ageFromBirthYear
   presets.ts           # listPresets, createPreset, deletePreset
   events.ts            # setEventActive (close / reopen)
+  shareCard.ts         # canvas-drawn PNG stats card + Web Share / download
   store.ts             # Zustand: session, authReady, profile, event, currentUser, eventUsers, drinks, offlineQueue, isOffline
   utils.ts             # generateInviteCode, timeAgo, getOrCreateDeviceId, formatHour, hexToRgba
 constants/
@@ -134,6 +135,24 @@ and partitioned client-side, sorted by `closed_at` descending.
 ⚠️ Confirmation UI uses an **inline confirm row, not `Alert.alert`** —
 react-native-web doesn't implement Alert, and web is the primary target. Same
 applies anywhere else a confirm is needed.
+
+## Share card
+
+The Share button on Stats draws a 1080x1350 PNG on a canvas (`lib/shareCard.ts`)
+and hands it to `navigator.share({ files })`, which is what surfaces "Save
+Image" on iOS and Android. Browsers without file sharing get a download instead.
+No dependency — the card is drawn by hand, so there is no html2canvas or
+view-shot in the tree.
+
+⚠️ **The whole path is synchronous on purpose. Do not add an `await` to it.**
+Safari only honours `navigator.share` while the user activation from the tap is
+still alive, and awaiting anything — including `document.fonts.ready` or
+`canvas.toBlob` — can spend it, after which the call rejects with
+NotAllowedError and the button looks dead. Hence `toDataURL` plus a synchronous
+base64 decode rather than `toBlob`. Fonts are safe to assume loaded: the app has
+already rendered in them before anyone can reach this screen.
+
+Web only. Native falls back to the original text share, same as Google sign-in.
 
 ## Drink presets
 
