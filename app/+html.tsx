@@ -44,10 +44,30 @@ export default function Root({ children }: PropsWithChildren) {
 
 // Dark background everywhere, including the overscroll area, so the PWA doesn't
 // flash white against the app's #0B0A12 canvas.
+//
+// The height rules matter more than they look. ScrollViewStyleReset (above)
+// sets `html, body, #root { height: 100% }`, and on mobile `100%` resolves
+// against the *layout* viewport — which browsers size to the largest viewport,
+// i.e. with the address bar retracted. The app shell then stands taller than
+// what's actually on screen, and the browser pans the visual viewport over the
+// overhang. That reads as being able to scroll a bit past the top and bottom,
+// and `overflow: hidden` does nothing about it, because the document isn't the
+// thing scrolling.
+//
+// dvh tracks the currently visible height instead, so there's no overhang to
+// pan over. Kept behind @supports with the 100% above as the fallback.
 const rootStyle = `
 html, body, #root {
   background-color: #0B0A12;
   overscroll-behavior: none;
+}
+@supports (height: 100dvh) {
+  html, body, #root {
+    height: 100dvh;
+  }
+}
+html {
+  overflow: hidden;
 }
 body {
   -webkit-tap-highlight-color: transparent;
