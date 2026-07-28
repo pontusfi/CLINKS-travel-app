@@ -37,7 +37,7 @@ environments (Production, Preview, Development):
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | your anon key |
 
 Without these the build succeeds but every DB call fails at runtime — a blank
-trips list and no error, which is a confusing way to find out.
+events list and no error, which is a confusing way to find out.
 
 > `EXPO_PUBLIC_` variables are inlined into the JS bundle and are readable by
 > anyone who opens devtools. That's expected for the anon key, and it's exactly
@@ -66,5 +66,5 @@ iOS clears a website's local storage after ~7 days without a visit. For an
 *installed* PWA this is much less aggressive, but it can still happen. If it
 does, the Supabase session is lost and they sign in with Google again — one tap,
 and because identity is now the Google account rather than a random device ID,
-**their trips come back intact.** This was the main thing the old device-ID model
+**their events come back intact.** This was the main thing the old device-ID model
 got wrong.

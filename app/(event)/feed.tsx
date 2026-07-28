@@ -20,7 +20,7 @@ import Animated, {
 } from 'react-native-reanimated'
 import { BottomSheetModal } from '@gorhom/bottom-sheet'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { supabase, Drink, TripUser } from '../../lib/supabase'
+import { supabase, Drink, EventUser } from '../../lib/supabase'
 import { useStore } from '../../lib/store'
 import { FeedItem } from '../../components/FeedItem'
 import { LogDrinkSheet } from '../../components/LogDrinkSheet'
@@ -29,13 +29,13 @@ export default function FeedScreen() {
   const insets = useSafeAreaInsets()
   const extraBottom = Math.max(0, insets.bottom - 20)
 
-  const trip = useStore(s => s.trip)
+  const event = useStore(s => s.event)
   const currentUser = useStore(s => s.currentUser)
   const drinks = useStore(s => s.drinks)
   const setDrinks = useStore(s => s.setDrinks)
   const addDrink = useStore(s => s.addDrink)
-  const tripUsers = useStore(s => s.tripUsers)
-  const setTripUsers = useStore(s => s.setTripUsers)
+  const eventUsers = useStore(s => s.eventUsers)
+  const setEventUsers = useStore(s => s.setEventUsers)
   const isOffline = useStore(s => s.isOffline)
 
   const sheetRef = useRef<BottomSheetModal>(null)
@@ -60,23 +60,23 @@ export default function FeedScreen() {
 
   // Load initial data
   useEffect(() => {
-    if (!trip) return
+    if (!event) return
     loadDrinks()
     loadUsers()
-  }, [trip?.id])
+  }, [event?.id])
 
   // Real-time subscription
   useEffect(() => {
-    if (!trip) return
+    if (!event) return
     const channel = supabase
-      .channel(`trip-drinks-${trip.id}`)
+      .channel(`event-drinks-${event.id}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'drinks',
-          filter: `trip_id=eq.${trip.id}`,
+          filter: `event_id=eq.${event.id}`,
         },
         payload => {
           addDrink(payload.new as Drink)
@@ -87,31 +87,31 @@ export default function FeedScreen() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [trip?.id])
+  }, [event?.id])
 
   async function loadDrinks() {
-    if (!trip) return
+    if (!event) return
     const { data } = await supabase
       .from('drinks')
       .select()
-      .eq('trip_id', trip.id)
+      .eq('event_id', event.id)
       .order('logged_at', { ascending: false })
       .limit(50)
     if (data) setDrinks(data as Drink[])
   }
 
   async function loadUsers() {
-    if (!trip) return
+    if (!event) return
     const { data } = await supabase
-      .from('trip_users')
+      .from('event_users')
       .select()
-      .eq('trip_id', trip.id)
-    if (data) setTripUsers(data as TripUser[])
+      .eq('event_id', event.id)
+    if (data) setEventUsers(data as EventUser[])
   }
 
   async function copyCode() {
-    if (!trip) return
-    await Clipboard.setStringAsync(trip.invite_code)
+    if (!event) return
+    await Clipboard.setStringAsync(event.invite_code)
     setCodeCopied(true)
     setTimeout(() => setCodeCopied(false), 2000)
   }
@@ -122,7 +122,7 @@ export default function FeedScreen() {
     return diff < 3600 * 1000
   }).length
 
-  if (!trip) return null
+  if (!event) return null
 
   return (
     <View style={styles.container}>
@@ -139,17 +139,17 @@ export default function FeedScreen() {
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.tripName}>{trip.name}</Text>
+            <Text style={styles.eventName}>{event.name}</Text>
             <View style={styles.livePill}>
               <View style={styles.liveDot} />
               <Text style={styles.liveText}>
-                {tripUsers.length} here
+                {eventUsers.length} here
               </Text>
             </View>
           </View>
           <Pressable onPress={copyCode} style={styles.codeChip}>
             <Text style={styles.codeChipText}>
-              {codeCopied ? '✓ COPIED' : trip.invite_code}
+              {codeCopied ? '✓ COPIED' : event.invite_code}
             </Text>
           </Pressable>
         </View>
@@ -172,7 +172,7 @@ export default function FeedScreen() {
               </View>
             )}
             <View style={styles.avatarStack}>
-              {tripUsers.slice(0, 3).map((u, i) => (
+              {eventUsers.slice(0, 3).map((u, i) => (
                 <View
                   key={u.id}
                   style={[styles.stackAvatar, { marginLeft: i > 0 ? -10 : 0 }]}
@@ -180,9 +180,9 @@ export default function FeedScreen() {
                   <Text style={styles.stackAvatarEmoji}>{u.avatar_emoji}</Text>
                 </View>
               ))}
-              {tripUsers.length > 3 && (
+              {eventUsers.length > 3 && (
                 <View style={[styles.stackAvatar, styles.stackMore, { marginLeft: -10 }]}>
-                  <Text style={styles.stackMoreText}>+{tripUsers.length - 3}</Text>
+                  <Text style={styles.stackMoreText}>+{eventUsers.length - 3}</Text>
                 </View>
               )}
             </View>
@@ -203,7 +203,7 @@ export default function FeedScreen() {
           data={drinks}
           keyExtractor={d => d.id}
           renderItem={({ item, index }) => (
-            <FeedItem drink={item} users={tripUsers} index={index} />
+            <FeedItem drink={item} users={eventUsers} index={index} />
           )}
           contentContainerStyle={[styles.feedList, { paddingBottom: 160 + extraBottom }]}
           ItemSeparatorComponent={() => <View style={{ height: 9 }} />}
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 13,
   },
-  tripName: {
+  eventName: {
     fontFamily: 'SpaceGrotesk_Bold',
     fontSize: 24,
     color: '#F5F3FA',

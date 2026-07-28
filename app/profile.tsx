@@ -209,7 +209,7 @@ export default function ProfileScreen() {
                 maxLength={20}
               />
               <Text style={styles.hint}>
-                Pre-fills every new trip. You can still use a different one per trip.
+                Pre-fills every new event. You can still use a different one per event.
               </Text>
             </View>
 

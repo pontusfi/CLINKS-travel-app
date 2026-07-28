@@ -6,8 +6,8 @@ React Native + Expo SDK 54 app. **Primary target is web** (static export → Ver
 installable as a PWA); native builds still work but aren't the distribution path.
 
 Identity is **Google sign-in via Supabase Auth**, required. Each user then picks a
-per-trip nickname + animal emoji, which is what shows in the feed. The older
-device-ID identity model is gone; `trip_users.device_id` remains only as a
+per-event nickname + animal emoji, which is what shows in the feed. The older
+device-ID identity model is gone; `event_users.device_id` remains only as a
 nullable legacy column.
 
 ## Stack
@@ -50,11 +50,11 @@ app/
   _layout.tsx          # Root: GestureHandlerRootView + BottomSheetModalProvider + fonts + NetInfo + AuthGate
   +html.tsx            # Web-only HTML shell (PWA manifest, theme colour, Apple meta). Needs web.output="static"
   sign-in.tsx          # Google sign-in gate — shown whenever there's no session
-  index.tsx            # Trips dashboard / hero empty state (Create / Join)
+  index.tsx            # Events dashboard / hero empty state (Create / Join)
   onboarding.tsx       # Onboarding — ?mode=create|join search param
   profile.tsx          # Account profile — nickname, avatar, body stats, sign out
-  (trip)/
-    _layout.tsx        # Custom tab bar (Feed | Stats), redirects to / if store.trip is null
+  (event)/
+    _layout.tsx        # Custom tab bar (Feed | Stats), redirects to / if store.event is null
     feed.tsx           # Live feed + FAB + real-time Supabase subscription
     stats.tsx          # Leaderboard + night arc chart + category breakdown
 components/
@@ -63,16 +63,17 @@ components/
   FeedItem.tsx
   StatCard.tsx
 lib/
-  supabase.ts          # createClient + Trip/TripUser/Drink types
+  supabase.ts          # createClient + Event/EventUser/Drink/Profile types
   auth.ts              # signInWithGoogle, signOut, cleanAuthUrl
   profile.ts           # loadProfile (get-or-create), saveProfile, ageFromBirthYear
-  store.ts             # Zustand: session, authReady, profile, trip, currentUser, tripUsers, drinks, offlineQueue, isOffline
+  store.ts             # Zustand: session, authReady, profile, event, currentUser, eventUsers, drinks, offlineQueue, isOffline
   utils.ts             # generateInviteCode, timeAgo, getOrCreateDeviceId, formatHour, hexToRgba
 constants/
   drinks.ts            # DRINK_CATEGORIES, CATEGORY_MAP, AVATAR_OPTIONS, AVATAR_BG_COLORS
 supabase/migrations/
-  001_google_auth.sql  # user_id/owner_id columns, RLS policies, join_trip_by_code()
-  002_profiles.sql     # profiles table, own-row RLS, auto-create trigger on auth.users
+  001_google_auth.sql  # user_id/owner_id columns, RLS policies, join-by-code RPC
+  002_profiles.sql     # profiles table, grants, own-row RLS, auto-create trigger
+  003_rename_trip_to_event.sql  # trips→events, trip_users→event_users, trip_id→event_id
 docs/
   GOOGLE_AUTH.md       # Google Cloud + Supabase dashboard setup
   DEPLOY.md            # Vercel deploy + env vars + PWA install
@@ -99,36 +100,47 @@ All styling uses `StyleSheet.create` (not NativeWind className). Gradients use `
 ## Supabase schema
 
 ```sql
-create table trips (id uuid primary key default gen_random_uuid(), name text not null, invite_code text unique not null, created_by uuid not null, owner_id uuid references auth.users(id) on delete cascade, created_at timestamptz default now(), active boolean default true);
-create table trip_users (id uuid primary key default gen_random_uuid(), trip_id uuid references trips(id) on delete cascade, display_name text not null, avatar_emoji text not null, user_id uuid references auth.users(id) on delete cascade, device_id text, joined_at timestamptz default now());
-create table drinks (id uuid primary key default gen_random_uuid(), trip_id uuid references trips(id) on delete cascade, user_id uuid references trip_users(id) on delete cascade, category text not null, name text, note text, logged_at timestamptz default now());
+create table events (id uuid primary key default gen_random_uuid(), name text not null, invite_code text unique not null, created_by uuid not null, owner_id uuid references auth.users(id) on delete cascade, created_at timestamptz default now(), active boolean default true);
+create table event_users (id uuid primary key default gen_random_uuid(), event_id uuid references events(id) on delete cascade, display_name text not null, avatar_emoji text not null, user_id uuid references auth.users(id) on delete cascade, device_id text, joined_at timestamptz default now());
+create table drinks (id uuid primary key default gen_random_uuid(), event_id uuid references events(id) on delete cascade, user_id uuid references event_users(id) on delete cascade, category text not null, name text, note text, logged_at timestamptz default now());
 create table profiles (id uuid primary key references auth.users(id) on delete cascade, display_name text not null default '', avatar_emoji text not null default '🦊', birth_year int, weight_kg numeric(5,1), height_cm int, sex text, created_at timestamptz default now(), updated_at timestamptz default now());
 ```
 
-Enable Realtime on `trips`, `trip_users` and `drinks` in Supabase dashboard →
+Enable Realtime on `events`, `event_users` and `drinks` in Supabase dashboard →
 Database → Replication. `profiles` doesn't need it — it's read once per session.
 
-**`profiles` vs `trip_users`.** `profiles` is one row per Google account and
-holds the *defaults* (nickname, avatar) plus private body stats. `trip_users` is
-one row per person per trip and is what the feed and leaderboard actually read —
+**`profiles` vs `event_users`.** `profiles` is one row per Google account and
+holds the *defaults* (nickname, avatar) plus private body stats. `event_users` is
+one row per person per event and is what the feed and leaderboard actually read —
 the profile only pre-fills it in `onboarding.tsx`, so changing your profile later
-does not rename you in trips you've already joined. `profiles` RLS is own-row
-only: trip-mates deliberately cannot read each other's weight.
+does not rename you in events you've already joined. `profiles` RLS is own-row
+only: fellow attendees deliberately cannot read each other's weight.
+
+⚠️ **New tables need an explicit `grant`, not just RLS policies.** GRANT decides
+whether `authenticated` may touch the table at all; RLS decides which rows. A
+table with perfect policies and no grant fails with `permission denied for table
+…` before any policy runs. The original three tables inherited grants from
+Supabase's default privileges; `profiles` did not, so 002 grants them by hand.
 
 A trigger on `auth.users` (`handle_new_user`) creates the profile row at sign-up.
 `loadProfile()` in `lib/profile.ts` also creates one if it's missing, which is
 what covers accounts that existed before migration 002.
 
-⚠️ **Two different `user_id`s.** `trip_users.user_id` → `auth.users` (the Google
-account). `drinks.user_id` → `trip_users` (the per-trip persona). They are not
-interchangeable; the `drinks` RLS policy joins through `trip_users` to bridge them.
+⚠️ **Two different `user_id`s.** `event_users.user_id` → `auth.users` (the Google
+account). `drinks.user_id` → `event_users` (the per-event persona). They are not
+interchangeable; the `drinks` RLS policy joins through `event_users` to bridge them.
 
-RLS is enabled on all four tables. On the three trip tables every policy is scoped through
-`is_trip_member(trip_id)`, a SECURITY DEFINER function. It has to be SECURITY
-DEFINER: a `trip_users` policy that queried `trip_users` directly would recurse.
+RLS is enabled on all four tables. On the three event tables every policy is scoped through
+`is_event_member(event_id)`, a SECURITY DEFINER function. It has to be SECURITY
+DEFINER: an `event_users` policy that queried `event_users` directly would recurse.
 
-Because `trips` SELECT is restricted to trips you're already in, joining by code
-cannot be a plain client query — it goes through the `join_trip_by_code()` RPC.
+Because `events` SELECT is restricted to events you're already in, joining by code
+cannot be a plain client query — it goes through the `join_event_by_code()` RPC.
+
+⚠️ **Function bodies are stored as text, not parse trees.** Policies follow a
+`rename table` on their own; `is_event_member()` and `join_event_by_code()` do
+not, and would fail at call time rather than at migration time. That's why 003
+drops and recreates them instead of renaming.
 
 ## Key patterns
 

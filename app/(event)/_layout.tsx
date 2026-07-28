@@ -41,19 +41,19 @@ function StatsIcon({ focused }: { focused: boolean }) {
   )
 }
 
-export default function TripLayout() {
-  const trip = useStore(s => s.trip)
+export default function EventLayout() {
+  const event = useStore(s => s.event)
   const insets = useSafeAreaInsets()
   // Extra space to add beyond the 20px already designed into the tab bar
   const extraBottom = Math.max(0, insets.bottom - 20)
 
   useEffect(() => {
-    if (!trip) {
+    if (!event) {
       router.replace('/')
     }
-  }, [trip])
+  }, [event])
 
-  if (!trip) return null
+  if (!event) return null
 
   return (
     <Tabs
@@ -95,7 +95,7 @@ export default function TripLayout() {
       <Tabs.Screen
         name="home"
         options={{
-          title: 'Trips',
+          title: 'Events',
           tabBarButton: ({ style }) => (
             <TouchableOpacity
               style={style}
@@ -103,7 +103,7 @@ export default function TripLayout() {
               activeOpacity={0.7}
             >
               <HomeIcon />
-              <Text style={[styles.tabLabel, styles.tabLabelInactive]}>Trips</Text>
+              <Text style={[styles.tabLabel, styles.tabLabelInactive]}>Events</Text>
             </TouchableOpacity>
           ),
         }}

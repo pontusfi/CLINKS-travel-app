@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Session } from '@supabase/supabase-js'
-import { supabase, Trip, TripUser, Drink, DrinkInsert, Profile } from './supabase'
+import { supabase, Event, EventUser, Drink, DrinkInsert, Profile } from './supabase'
 
 interface AppStore {
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -21,13 +21,13 @@ interface AppStore {
   setProfile: (profile: Profile | null) => void
   setProfileError: (message: string | null) => void
 
-  // ── Trip ──────────────────────────────────────────────────────────────────
-  trip: Trip | null
-  currentUser: TripUser | null
-  tripUsers: TripUser[]
-  setTrip: (trip: Trip, user: TripUser) => void
-  setTripUsers: (users: TripUser[]) => void
-  clearTrip: () => void
+  // ── Event ─────────────────────────────────────────────────────────────────
+  event: Event | null
+  currentUser: EventUser | null
+  eventUsers: EventUser[]
+  setEvent: (event: Event, user: EventUser) => void
+  setEventUsers: (users: EventUser[]) => void
+  clearEvent: () => void
 
   // ── Drinks ────────────────────────────────────────────────────────────────
   drinks: Drink[]
@@ -55,15 +55,15 @@ export const useStore = create<AppStore>()(
       setAuthReady: (authReady) => set({ authReady }),
 
       // Full wipe on sign-out — otherwise the next person to sign in on this
-      // device would briefly see the previous user's trip and feed.
+      // device would briefly see the previous user's event and feed.
       reset: () =>
         set({
           session: null,
           profile: null,
           profileError: null,
-          trip: null,
+          event: null,
           currentUser: null,
-          tripUsers: [],
+          eventUsers: [],
           drinks: [],
           offlineQueue: [],
         }),
@@ -74,14 +74,14 @@ export const useStore = create<AppStore>()(
       setProfile: (profile) => set({ profile, profileError: null }),
       setProfileError: (profileError) => set({ profileError }),
 
-      // ── Trip ────────────────────────────────────────────────────────────
-      trip: null,
+      // ── Event ───────────────────────────────────────────────────────────
+      event: null,
       currentUser: null,
-      tripUsers: [],
+      eventUsers: [],
 
-      setTrip: (trip, user) => set({ trip, currentUser: user }),
-      setTripUsers: (users) => set({ tripUsers: users }),
-      clearTrip: () => set({ trip: null, currentUser: null, tripUsers: [], drinks: [], offlineQueue: [] }),
+      setEvent: (event, user) => set({ event, currentUser: user }),
+      setEventUsers: (users) => set({ eventUsers: users }),
+      clearEvent: () => set({ event: null, currentUser: null, eventUsers: [], drinks: [], offlineQueue: [] }),
 
       // ── Drinks ──────────────────────────────────────────────────────────
       drinks: [],
@@ -115,9 +115,19 @@ export const useStore = create<AppStore>()(
     {
       name: 'clink-storage',
       storage: createJSONStorage(() => AsyncStorage),
+      // v0 stored the active event under `trip`. Without this, everyone already
+      // signed in gets silently bounced to the dashboard on their next load.
+      version: 1,
+      migrate: (persisted: any, version) => {
+        if (version === 0 && persisted && 'trip' in persisted) {
+          const { trip, ...rest } = persisted
+          return { ...rest, event: trip }
+        }
+        return persisted
+      },
       partialize: (state) => ({
         profile: state.profile,
-        trip: state.trip,
+        event: state.event,
         currentUser: state.currentUser,
         offlineQueue: state.offlineQueue,
       }),

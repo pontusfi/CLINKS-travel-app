@@ -22,19 +22,19 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import type { Trip, TripUser } from '../lib/supabase'
+import type { Event, EventUser } from '../lib/supabase'
 
 const { width } = Dimensions.get('window')
 
-type TripEntry = { trip: Trip; user: TripUser }
+type EventEntry = { event: Event; user: EventUser }
 
 export default function HomeScreen() {
-  const trip = useStore(s => s.trip)
-  const setTrip = useStore(s => s.setTrip)
+  const event = useStore(s => s.event)
+  const setEvent = useStore(s => s.setEvent)
   const session = useStore(s => s.session)
   const profile = useStore(s => s.profile)
 
-  const [trips, setTrips] = useState<TripEntry[]>([])
+  const [events, setEvents] = useState<EventEntry[]>([])
   const [loading, setLoading] = useState(true)
 
   const floatY = useSharedValue(0)
@@ -74,14 +74,14 @@ export default function HomeScreen() {
       }
       setLoading(true)
       const { data } = await supabase
-        .from('trip_users')
-        .select('*, trips(*)')
+        .from('event_users')
+        .select('*, events(*)')
         .eq('user_id', userId)
       if (!active) return
-      const entries: TripEntry[] = (data ?? [])
-        .filter((row: any) => row.trips?.active)
-        .map((row: any) => ({ trip: row.trips as Trip, user: row as TripUser }))
-      setTrips(entries)
+      const entries: EventEntry[] = (data ?? [])
+        .filter((row: any) => row.events?.active)
+        .map((row: any) => ({ event: row.events as Event, user: row as EventUser }))
+      setEvents(entries)
       setLoading(false)
     }
     load()
@@ -101,9 +101,9 @@ export default function HomeScreen() {
     </TouchableOpacity>
   )
 
-  function enterTrip(entry: TripEntry) {
-    setTrip(entry.trip, entry.user)
-    router.replace('/(trip)/feed')
+  function enterEvent(entry: EventEntry) {
+    setEvent(entry.event, entry.user)
+    router.replace('/(event)/feed')
   }
 
   if (loading) {
@@ -114,7 +114,7 @@ export default function HomeScreen() {
     )
   }
 
-  if (trips.length === 0) {
+  if (events.length === 0) {
     return (
       <View style={styles.container}>
         {/* Background glow blobs */}
@@ -152,7 +152,7 @@ export default function HomeScreen() {
 
             <Text style={styles.tagline}>
               Log every round with your crew, in real time.{' '}
-              <Text style={styles.taglineHighlight}>Start a trip or join one.</Text>
+              <Text style={styles.taglineHighlight}>Start an event or join one.</Text>
             </Text>
           </View>
 
@@ -168,7 +168,7 @@ export default function HomeScreen() {
                 end={{ x: 1, y: 1 }}
                 style={styles.primaryButton}
               >
-                <Text style={styles.primaryButtonText}>Create a trip</Text>
+                <Text style={styles.primaryButtonText}>Create an event</Text>
               </LinearGradient>
             </TouchableOpacity>
 
@@ -197,9 +197,9 @@ export default function HomeScreen() {
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.dashHeader}>
           <View style={{ flex: 1, gap: 3 }}>
-            <Text style={styles.dashTitle}>Your trips</Text>
+            <Text style={styles.dashTitle}>Your events</Text>
             <Text style={styles.dashSubtitle}>
-              {trips.length} TRIP{trips.length !== 1 ? 'S' : ''}
+              {events.length} EVENT{events.length !== 1 ? 'S' : ''}
             </Text>
           </View>
           {profileChip}
@@ -207,27 +207,27 @@ export default function HomeScreen() {
 
         <ScrollView
           style={{ flex: 1 }}
-          contentContainerStyle={styles.tripsList}
+          contentContainerStyle={styles.eventsList}
           showsVerticalScrollIndicator={false}
         >
-          {trips.map(entry => (
+          {events.map(entry => (
             <TouchableOpacity
-              key={entry.trip.id}
-              onPress={() => enterTrip(entry)}
+              key={entry.event.id}
+              onPress={() => enterEvent(entry)}
               style={[
-                styles.tripCard,
-                trip?.id === entry.trip.id && styles.tripCardActive,
+                styles.eventCard,
+                event?.id === entry.event.id && styles.eventCardActive,
               ]}
               activeOpacity={0.8}
             >
               <View style={{ flex: 1, gap: 4 }}>
-                <Text style={styles.tripCardName}>{entry.trip.name}</Text>
-                <Text style={styles.tripCardCode}>{entry.trip.invite_code}</Text>
+                <Text style={styles.eventCardName}>{entry.event.name}</Text>
+                <Text style={styles.eventCardCode}>{entry.event.invite_code}</Text>
               </View>
               <View style={{ alignItems: 'center', gap: 3 }}>
                 <Text style={{ fontSize: 28 }}>{entry.user.avatar_emoji}</Text>
-                {trip?.id === entry.trip.id && (
-                  <Text style={styles.tripCardActiveLabel}>ACTIVE</Text>
+                {event?.id === entry.event.id && (
+                  <Text style={styles.eventCardActiveLabel}>ACTIVE</Text>
                 )}
               </View>
             </TouchableOpacity>
@@ -245,7 +245,7 @@ export default function HomeScreen() {
               end={{ x: 1, y: 1 }}
               style={styles.primaryButton}
             >
-              <Text style={styles.primaryButtonText}>Create a trip</Text>
+              <Text style={styles.primaryButtonText}>Create an event</Text>
             </LinearGradient>
           </TouchableOpacity>
 
@@ -389,11 +389,11 @@ const styles = StyleSheet.create({
     color: '#6B6680',
     letterSpacing: 0.6,
   },
-  tripsList: {
+  eventsList: {
     gap: 10,
     paddingBottom: 16,
   },
-  tripCard: {
+  eventCard: {
     backgroundColor: '#15131D',
     borderRadius: 18,
     borderWidth: 1,
@@ -403,21 +403,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  tripCardActive: {
+  eventCardActive: {
     borderColor: 'rgba(155,92,255,0.45)',
     backgroundColor: 'rgba(155,92,255,0.08)',
   },
-  tripCardName: {
+  eventCardName: {
     fontFamily: 'SpaceGrotesk_Bold',
     fontSize: 17,
     color: '#F5F3FA',
   },
-  tripCardCode: {
+  eventCardCode: {
     fontFamily: 'SpaceMono',
     fontSize: 12,
     color: '#6B6680',
   },
-  tripCardActiveLabel: {
+  eventCardActiveLabel: {
     fontFamily: 'SpaceMono',
     fontSize: 9,
     color: '#9B5CFF',

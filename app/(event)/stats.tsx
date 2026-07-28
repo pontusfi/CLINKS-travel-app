@@ -26,19 +26,19 @@ export default function StatsScreen() {
   const insets = useSafeAreaInsets()
   const extraBottom = Math.max(0, insets.bottom - 20)
 
-  const trip = useStore(s => s.trip)
+  const event = useStore(s => s.event)
   const drinks = useStore(s => s.drinks)
-  const tripUsers = useStore(s => s.tripUsers)
+  const eventUsers = useStore(s => s.eventUsers)
 
   const stats = useMemo(() => {
-    if (!drinks.length || !tripUsers.length) return null
+    if (!drinks.length || !eventUsers.length) return null
 
     // ── Leaderboard ──────────────────────────────────────────────────────────
     const countByUser: Record<string, number> = {}
     for (const d of drinks) {
       countByUser[d.user_id] = (countByUser[d.user_id] ?? 0) + 1
     }
-    const leaderboard = tripUsers
+    const leaderboard = eventUsers
       .map(u => ({ user: u, count: countByUser[u.id] ?? 0 }))
       .sort((a, b) => b.count - a.count)
     const maxCount = leaderboard[0]?.count ?? 1
@@ -77,12 +77,12 @@ export default function StatsScreen() {
       topCat,
       total: drinks.length,
     }
-  }, [drinks, tripUsers])
+  }, [drinks, eventUsers])
 
   async function handleShare() {
-    if (!trip || !stats) return
+    if (!event || !stats) return
     const lines = [
-      `🍻 ${trip.name} — CLINK Stats`,
+      `🍻 ${event.name} — CLINK Stats`,
       '',
       `Total drinks: ${stats.total}`,
       '',
@@ -97,7 +97,7 @@ export default function StatsScreen() {
     await Share.share({ message: lines.join('\n') })
   }
 
-  if (!trip) return null
+  if (!event) return null
 
   const barWidth = Math.floor((CHART_WIDTH - PARTY_HOURS.length * 6) / PARTY_HOURS.length)
 
@@ -112,7 +112,7 @@ export default function StatsScreen() {
           <View style={styles.header}>
             <View>
               <Text style={styles.title}>Stats</Text>
-              <Text style={styles.subtitle}>{trip.name} · live</Text>
+              <Text style={styles.subtitle}>{event.name} · live</Text>
             </View>
             <TouchableOpacity onPress={handleShare} activeOpacity={0.8} style={styles.shareBtn}>
               <LinearGradient

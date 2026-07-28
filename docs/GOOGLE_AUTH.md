@@ -55,13 +55,17 @@ Supabase dashboard → **SQL Editor** → paste and run:
 supabase/migrations/001_google_auth.sql
 ```
 
-This adds `trip_users.user_id`, `trips.owner_id`, turns on RLS, and creates the
-`join_trip_by_code()` function.
+This adds the `user_id` / `owner_id` columns, turns on RLS, and creates the
+join-by-code RPC.
+
+> These tables were called `trips` / `trip_users` when 001 was written;
+> `003_rename_trip_to_event.sql` renames them to `events` / `event_users`. Run
+> the migrations in order and you land in the right place.
 
 > **Heads up:** RLS is currently **off**, so the existing "Bennyboi's trip" test
 > data is readable by anyone with the anon key. After the migration, rows with a
 > null `user_id` match no policy and become invisible. That's intentional — the
-> old device-ID identities can't be mapped to Google accounts. Re-create the trip
+> old device-ID identities can't be mapped to Google accounts. Re-create it
 > after signing in, or uncomment the `delete` at the bottom of the migration.
 
 ## 5. Verify
@@ -71,15 +75,15 @@ npx expo start --web --clear
 ```
 
 Expected flow: sign-in screen → Continue with Google → Google consent →
-back to the trips dashboard → create a trip → pick nickname + emoji.
+back to the events dashboard → create an event → pick nickname + emoji.
 
 To confirm RLS actually took, re-run the anon read that currently succeeds:
 
 ```bash
-curl "https://<ref>.supabase.co/rest/v1/trips?select=*" -H "apikey: <anon-key>"
+curl "https://<ref>.supabase.co/rest/v1/events?select=*" -H "apikey: <anon-key>"
 ```
 
-Before the migration this returns your trips. After, it should return `[]` —
+Before the migration this returns your events. After, it should return `[]` —
 the anon key alone no longer grants read access.
 
 ## Native (Android / iOS) — not wired up

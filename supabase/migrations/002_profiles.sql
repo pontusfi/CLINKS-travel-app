@@ -6,6 +6,9 @@
 --
 -- Note this does NOT replace trip_users.display_name / avatar_emoji. Those stay
 -- per-trip on purpose — the profile is only what pre-fills them.
+--
+-- NOTE: trip_users is renamed to event_users by 003_rename_trip_to_event.sql.
+-- Nothing in this file touches that table, so the order doesn't matter here.
 
 -- ── 1. Table ─────────────────────────────────────────────────────────────────
 
@@ -28,7 +31,20 @@ create table if not exists profiles (
   updated_at timestamptz not null default now()
 );
 
--- ── 2. Row Level Security ────────────────────────────────────────────────────
+-- ── 2. Grants ────────────────────────────────────────────────────────────────
+-- Two separate layers, and both are required. GRANT decides whether the role may
+-- touch the table at all; RLS below decides which rows. Without this, clients get
+-- "permission denied for table profiles" and the policies never even run.
+--
+-- The older tables got their grants from Supabase's default privileges, which is
+-- easy to assume covers new tables too. It doesn't reliably — be explicit.
+--
+-- No DELETE: there's no delete policy either, so nothing can remove a profile
+-- except deleting the auth user, which cascades.
+
+grant select, insert, update on table public.profiles to authenticated;
+
+-- ── 3. Row Level Security ────────────────────────────────────────────────────
 -- Own row only. Trip-mates deliberately cannot read this table: the feed and
 -- leaderboard already have everything they need in trip_users, and weight is
 -- nobody else's business.
@@ -51,7 +67,7 @@ create policy profiles_update on profiles
   using (id = auth.uid())
   with check (id = auth.uid());
 
--- ── 3. updated_at ────────────────────────────────────────────────────────────
+-- ── 4. updated_at ────────────────────────────────────────────────────────────
 
 create or replace function public.touch_updated_at()
 returns trigger
@@ -68,7 +84,7 @@ create trigger profiles_touch_updated_at
   before update on profiles
   for each row execute function public.touch_updated_at();
 
--- ── 4. Auto-create a profile on sign-up ──────────────────────────────────────
+-- ── 5. Auto-create a profile on sign-up ──────────────────────────────────────
 -- SECURITY DEFINER because the trigger runs as the auth service, which is not
 -- `authenticated` and so is not covered by the insert policy above.
 
@@ -99,7 +115,7 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- ── 5. Backfill anyone who signed in before this migration ───────────────────
+-- ── 6. Backfill anyone who signed in before this migration ───────────────────
 
 insert into profiles (id, display_name)
 select

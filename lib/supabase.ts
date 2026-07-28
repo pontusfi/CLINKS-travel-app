@@ -28,7 +28,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 
 // ─── Database row types ────────────────────────────────────────────────────────
 
-export interface Trip {
+export interface Event {
   id: string
   name: string
   invite_code: string
@@ -38,9 +38,9 @@ export interface Trip {
   active: boolean
 }
 
-export interface TripUser {
+export interface EventUser {
   id: string
-  trip_id: string
+  event_id: string
   display_name: string
   avatar_emoji: string
   user_id: string
@@ -67,7 +67,7 @@ export type ProfilePatch = Partial<
 
 export interface Drink {
   id: string
-  trip_id: string
+  event_id: string
   user_id: string
   category: DrinkCategory
   name: string | null

@@ -22,7 +22,7 @@ export const LogDrinkSheet = forwardRef<BottomSheetModal, Props>(
     const [drinkName, setDrinkName] = useState('')
     const [note, setNote] = useState('')
 
-    const trip = useStore(s => s.trip)
+    const event = useStore(s => s.event)
     const currentUser = useStore(s => s.currentUser)
     const addDrink = useStore(s => s.addDrink)
     const isOffline = useStore(s => s.isOffline)
@@ -50,14 +50,14 @@ export const LogDrinkSheet = forwardRef<BottomSheetModal, Props>(
     }
 
     async function handleLog() {
-      if (!trip || !currentUser) return
+      if (!event || !currentUser) return
 
       const cat = CATEGORY_MAP[category]
       const now = new Date().toISOString()
 
       const optimistic: Drink = {
         id: `local-${Date.now()}`,
-        trip_id: trip.id,
+        event_id: event.id,
         user_id: currentUser.id,
         category,
         name: drinkName || null,
@@ -70,7 +70,7 @@ export const LogDrinkSheet = forwardRef<BottomSheetModal, Props>(
       onDrinkLogged?.()
 
       const insert = {
-        trip_id: trip.id,
+        event_id: event.id,
         user_id: currentUser.id,
         category,
         name: drinkName || null,

@@ -1,12 +1,12 @@
 import { View, Text, StyleSheet } from 'react-native'
 import Animated, { FadeInDown } from 'react-native-reanimated'
-import { Drink, TripUser } from '../lib/supabase'
+import { Drink, EventUser } from '../lib/supabase'
 import { CATEGORY_MAP } from '../constants/drinks'
 import { timeAgo } from '../lib/utils'
 
 interface Props {
   drink: Drink
-  users: TripUser[]
+  users: EventUser[]
   index?: number
 }
 

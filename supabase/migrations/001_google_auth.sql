@@ -1,6 +1,10 @@
 -- CLINK — Google auth migration
 -- Run this in the Supabase dashboard → SQL Editor.
 --
+-- NOTE: the `trips` / `trip_users` / `trip_id` names below are historical.
+-- 003_rename_trip_to_event.sql renames them to events / event_users / event_id.
+-- This file is left as-run; don't edit it to match, just run 003 after it.
+--
 -- What it does:
 --   1. Adds trip_users.user_id → auth.users(id) as the new identity
 --   2. Repoints trips.created_by from a device UUID to an auth user

@@ -18,20 +18,20 @@ import { supabase } from '../lib/supabase'
 import { useStore } from '../lib/store'
 import { generateInviteCode } from '../lib/utils'
 import { AVATAR_OPTIONS, AVATAR_BG_COLORS } from '../constants/drinks'
-import type { Trip, TripUser } from '../lib/supabase'
+import type { Event, EventUser } from '../lib/supabase'
 
 export default function OnboardingScreen() {
   const { mode } = useLocalSearchParams<{ mode: 'create' | 'join' }>()
   const isCreate = mode === 'create'
 
-  const setTrip = useStore(s => s.setTrip)
+  const setEvent = useStore(s => s.setEvent)
   const session = useStore(s => s.session)
   const profile = useStore(s => s.profile)
 
   // Seeded from the account profile, but still editable — the nickname and
-  // avatar are stored per trip, so overriding them here only affects this one.
+  // avatar are stored per event, so overriding them here only affects this one.
   const [name, setName] = useState(profile?.display_name ?? '')
-  const [tripName, setTripName] = useState('')
+  const [eventName, setEventName] = useState('')
   const [avatar, setAvatar] = useState(profile?.avatar_emoji || AVATAR_OPTIONS[0])
   const [joinCode, setJoinCode] = useState('')
   const [generatedCode] = useState(() => generateInviteCode())
@@ -51,7 +51,7 @@ export default function OnboardingScreen() {
 
   const canSubmit =
     name.trim().length > 0 &&
-    (isCreate ? tripName.trim().length > 0 : joinCode.length === 6)
+    (isCreate ? eventName.trim().length > 0 : joinCode.length === 6)
 
   async function handleSubmit() {
     if (!canSubmit) return
@@ -66,11 +66,11 @@ export default function OnboardingScreen() {
       }
 
       if (isCreate) {
-        // Create trip
-        const { data: trip, error: tripErr } = await supabase
-          .from('trips')
+        // Create event
+        const { data: event, error: eventErr } = await supabase
+          .from('events')
           .insert({
-            name: tripName.trim(),
+            name: eventName.trim(),
             invite_code: generatedCode,
             created_by: userId,
             owner_id: userId,
@@ -79,13 +79,13 @@ export default function OnboardingScreen() {
           .select()
           .single()
 
-        if (tripErr) throw tripErr
+        if (eventErr) throw eventErr
 
-        // Create trip user
+        // Create event user
         const { data: user, error: userErr } = await supabase
-          .from('trip_users')
+          .from('event_users')
           .insert({
-            trip_id: trip.id,
+            event_id: event.id,
             display_name: name.trim(),
             avatar_emoji: avatar,
             user_id: userId,
@@ -95,44 +95,44 @@ export default function OnboardingScreen() {
 
         if (userErr) throw userErr
 
-        setTrip(trip, user)
-        router.replace('/(trip)/feed')
+        setEvent(event, user)
+        router.replace('/(event)/feed')
       } else {
-        // Join by code. RLS hides trips you're not a member of, so this goes
+        // Join by code. RLS hides events you're not a member of, so this goes
         // through a SECURITY DEFINER function that does the lookup server-side.
         const code = joinCode.trim().toUpperCase()
 
-        const { data: trip, error: joinErr } = await supabase
-          .rpc('join_trip_by_code', {
+        const { data: event, error: joinErr } = await supabase
+          .rpc('join_event_by_code', {
             p_code: code,
             p_display_name: name.trim(),
             p_avatar_emoji: avatar,
           })
-          .single<Trip>()
+          .single<Event>()
 
         if (joinErr) {
-          if (joinErr.message?.includes('TRIP_NOT_FOUND')) {
-            setError('Trip not found. Double-check the code.')
+          if (joinErr.message?.includes('EVENT_NOT_FOUND')) {
+            setError('Event not found. Double-check the code.')
             return
           }
           throw joinErr
         }
-        if (!trip) {
-          setError('Trip not found. Double-check the code.')
+        if (!event) {
+          setError('Event not found. Double-check the code.')
           return
         }
 
         const { data: user, error: userErr } = await supabase
-          .from('trip_users')
+          .from('event_users')
           .select()
-          .eq('trip_id', trip.id)
+          .eq('event_id', event.id)
           .eq('user_id', userId)
-          .single<TripUser>()
+          .single<EventUser>()
 
         if (userErr) throw userErr
 
-        setTrip(trip, user)
-        router.replace('/(trip)/feed')
+        setEvent(event, user)
+        router.replace('/(event)/feed')
       }
     } catch (e: any) {
       setError(e.message ?? 'Something went wrong. Try again.')
@@ -161,7 +161,7 @@ export default function OnboardingScreen() {
                 <Text style={styles.backBtnText}>‹</Text>
               </TouchableOpacity>
               <Text style={styles.headerTitle}>
-                {isCreate ? 'Set up your avatar' : 'Join a trip'}
+                {isCreate ? 'Set up your avatar' : 'Join an event'}
               </Text>
             </View>
 
@@ -208,13 +208,13 @@ export default function OnboardingScreen() {
               />
             </View>
 
-            {/* Trip name input (create mode only) */}
+            {/* Event name input (create mode only) */}
             {isCreate && (
               <View style={styles.section}>
-                <Text style={styles.label}>TRIP NAME</Text>
+                <Text style={styles.label}>EVENT NAME</Text>
                 <TextInput
-                  value={tripName}
-                  onChangeText={setTripName}
+                  value={eventName}
+                  onChangeText={setEventName}
                   placeholder="e.g. Barcelona 2026"
                   placeholderTextColor="#5C5870"
                   style={styles.input}
@@ -304,7 +304,7 @@ export default function OnboardingScreen() {
                   <ActivityIndicator color="#fff" />
                 ) : (
                   <Text style={styles.submitButtonText}>
-                    {isCreate ? 'Start the trip 🍻' : 'Join the trip 🍻'}
+                    {isCreate ? 'Start the event 🍻' : 'Join the event 🍻'}
                   </Text>
                 )}
               </LinearGradient>

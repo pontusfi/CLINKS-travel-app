@@ -67,7 +67,7 @@ export default function RootLayout() {
   // ── Profile ───────────────────────────────────────────────────────────────
   // Keyed on the user id, not the session object, so a token refresh doesn't
   // refetch. Failures are swallowed: the profile only supplies defaults, and a
-  // blank one shouldn't stop you getting into a trip.
+  // blank one shouldn't stop you getting into an event.
   useEffect(() => {
     if (!session) return
     let active = true
