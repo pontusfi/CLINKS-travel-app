@@ -20,6 +20,7 @@ import NetInfo from '@react-native-community/netinfo'
 import { useStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
 import { cleanAuthUrl } from '../lib/auth'
+import { loadProfile } from '../lib/profile'
 
 SplashScreen.preventAutoHideAsync()
 
@@ -28,6 +29,9 @@ export default function RootLayout() {
   const flushOfflineQueue = useStore(s => s.flushOfflineQueue)
   const setSession = useStore(s => s.setSession)
   const setAuthReady = useStore(s => s.setAuthReady)
+  const session = useStore(s => s.session)
+  const setProfile = useStore(s => s.setProfile)
+  const setProfileError = useStore(s => s.setProfileError)
 
   const [fontsLoaded] = useFonts({
     SpaceGrotesk: SpaceGrotesk_400Regular,
@@ -59,6 +63,22 @@ export default function RootLayout() {
 
     return () => sub.subscription.unsubscribe()
   }, [])
+
+  // ── Profile ───────────────────────────────────────────────────────────────
+  // Keyed on the user id, not the session object, so a token refresh doesn't
+  // refetch. Failures are swallowed: the profile only supplies defaults, and a
+  // blank one shouldn't stop you getting into a trip.
+  useEffect(() => {
+    if (!session) return
+    let active = true
+    loadProfile(session)
+      .then(profile => { if (active) setProfile(profile) })
+      .catch(err => {
+        console.warn('Could not load profile:', err.message)
+        if (active) setProfileError(err.message ?? 'Could not load your profile.')
+      })
+    return () => { active = false }
+  }, [session?.user?.id])
 
   // ── Network ───────────────────────────────────────────────────────────────
   useEffect(() => {

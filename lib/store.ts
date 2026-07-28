@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Session } from '@supabase/supabase-js'
-import { supabase, Trip, TripUser, Drink, DrinkInsert } from './supabase'
+import { supabase, Trip, TripUser, Drink, DrinkInsert, Profile } from './supabase'
 
 interface AppStore {
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -12,6 +12,14 @@ interface AppStore {
   setSession: (session: Session | null) => void
   setAuthReady: (ready: boolean) => void
   reset: () => void
+
+  // ── Profile ───────────────────────────────────────────────────────────────
+  /** Account-level defaults (nickname, avatar, body stats). Null until loaded. */
+  profile: Profile | null
+  /** Why the profile couldn't be loaded — usually "migration 002 hasn't run". */
+  profileError: string | null
+  setProfile: (profile: Profile | null) => void
+  setProfileError: (message: string | null) => void
 
   // ── Trip ──────────────────────────────────────────────────────────────────
   trip: Trip | null
@@ -51,12 +59,20 @@ export const useStore = create<AppStore>()(
       reset: () =>
         set({
           session: null,
+          profile: null,
+          profileError: null,
           trip: null,
           currentUser: null,
           tripUsers: [],
           drinks: [],
           offlineQueue: [],
         }),
+
+      // ── Profile ─────────────────────────────────────────────────────────
+      profile: null,
+      profileError: null,
+      setProfile: (profile) => set({ profile, profileError: null }),
+      setProfileError: (profileError) => set({ profileError }),
 
       // ── Trip ────────────────────────────────────────────────────────────
       trip: null,
@@ -100,6 +116,7 @@ export const useStore = create<AppStore>()(
       name: 'clink-storage',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
+        profile: state.profile,
         trip: state.trip,
         currentUser: state.currentUser,
         offlineQueue: state.offlineQueue,

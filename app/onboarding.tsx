@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   View,
   Text,
@@ -26,14 +26,28 @@ export default function OnboardingScreen() {
 
   const setTrip = useStore(s => s.setTrip)
   const session = useStore(s => s.session)
+  const profile = useStore(s => s.profile)
 
-  const [name, setName] = useState('')
+  // Seeded from the account profile, but still editable — the nickname and
+  // avatar are stored per trip, so overriding them here only affects this one.
+  const [name, setName] = useState(profile?.display_name ?? '')
   const [tripName, setTripName] = useState('')
-  const [avatar, setAvatar] = useState(AVATAR_OPTIONS[0])
+  const [avatar, setAvatar] = useState(profile?.avatar_emoji || AVATAR_OPTIONS[0])
   const [joinCode, setJoinCode] = useState('')
   const [generatedCode] = useState(() => generateInviteCode())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Usually the profile is already in the store by the time this screen opens.
+  // On a cold load straight to /onboarding it can land a moment later, so seed
+  // once when it does — and never again, or it would undo the user's edits.
+  const seeded = useRef(!!profile)
+  useEffect(() => {
+    if (!profile || seeded.current) return
+    seeded.current = true
+    setName(profile.display_name)
+    setAvatar(profile.avatar_emoji || AVATAR_OPTIONS[0])
+  }, [profile])
 
   const canSubmit =
     name.trim().length > 0 &&

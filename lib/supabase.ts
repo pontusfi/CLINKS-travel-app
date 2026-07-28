@@ -48,6 +48,23 @@ export interface TripUser {
   joined_at: string
 }
 
+/** One row per Google account — see supabase/migrations/002_profiles.sql. */
+export interface Profile {
+  id: string
+  display_name: string
+  avatar_emoji: string
+  birth_year: number | null
+  weight_kg: number | null
+  height_cm: number | null
+  sex: 'male' | 'female' | 'other' | null
+  created_at: string
+  updated_at: string
+}
+
+export type ProfilePatch = Partial<
+  Pick<Profile, 'display_name' | 'avatar_emoji' | 'birth_year' | 'weight_kg' | 'height_cm' | 'sex'>
+>
+
 export interface Drink {
   id: string
   trip_id: string

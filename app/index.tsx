@@ -22,7 +22,6 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useStore } from '../lib/store'
 import { supabase } from '../lib/supabase'
-import { signOut } from '../lib/auth'
 import type { Trip, TripUser } from '../lib/supabase'
 
 const { width } = Dimensions.get('window')
@@ -33,7 +32,7 @@ export default function HomeScreen() {
   const trip = useStore(s => s.trip)
   const setTrip = useStore(s => s.setTrip)
   const session = useStore(s => s.session)
-  const reset = useStore(s => s.reset)
+  const profile = useStore(s => s.profile)
 
   const [trips, setTrips] = useState<TripEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -89,10 +88,18 @@ export default function HomeScreen() {
     return () => { active = false }
   }, [session?.user?.id]))
 
-  async function handleSignOut() {
-    await signOut()
-    reset()
-  }
+  const profileChip = (
+    <TouchableOpacity
+      onPress={() => router.push('/profile')}
+      style={styles.profileChip}
+      activeOpacity={0.7}
+    >
+      <Text style={styles.profileChipEmoji}>{profile?.avatar_emoji ?? '🙂'}</Text>
+      <Text style={styles.profileChipText} numberOfLines={1}>
+        {profile?.display_name || 'Profile'}
+      </Text>
+    </TouchableOpacity>
+  )
 
   function enterTrip(entry: TripEntry) {
     setTrip(entry.trip, entry.user)
@@ -115,6 +122,8 @@ export default function HomeScreen() {
         <View style={[styles.blob, styles.blobBottom]} />
 
         <SafeAreaView style={styles.safeArea}>
+          <View style={styles.heroHeader}>{profileChip}</View>
+
           {/* Center content */}
           <View style={styles.center}>
             {/* Live pill */}
@@ -193,9 +202,7 @@ export default function HomeScreen() {
               {trips.length} TRIP{trips.length !== 1 ? 'S' : ''}
             </Text>
           </View>
-          <TouchableOpacity onPress={handleSignOut} style={styles.signOutBtn} activeOpacity={0.7}>
-            <Text style={styles.signOutText}>Sign out</Text>
-          </TouchableOpacity>
+          {profileChip}
         </View>
 
         <ScrollView
@@ -344,18 +351,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  signOutBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  heroHeader: {
+    paddingTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  profileChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingLeft: 10,
+    paddingRight: 14,
+    paddingVertical: 7,
     borderRadius: 999,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
+    maxWidth: 170,
   },
-  signOutText: {
+  profileChipEmoji: {
+    fontSize: 17,
+  },
+  profileChipText: {
     fontFamily: 'SpaceGrotesk_Medium',
     fontSize: 13,
     color: '#B6B0C8',
+    flexShrink: 1,
   },
   dashTitle: {
     fontFamily: 'SpaceGrotesk_Bold',

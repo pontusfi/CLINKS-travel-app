@@ -52,6 +52,7 @@ app/
   sign-in.tsx          # Google sign-in gate — shown whenever there's no session
   index.tsx            # Trips dashboard / hero empty state (Create / Join)
   onboarding.tsx       # Onboarding — ?mode=create|join search param
+  profile.tsx          # Account profile — nickname, avatar, body stats, sign out
   (trip)/
     _layout.tsx        # Custom tab bar (Feed | Stats), redirects to / if store.trip is null
     feed.tsx           # Live feed + FAB + real-time Supabase subscription
@@ -64,12 +65,14 @@ components/
 lib/
   supabase.ts          # createClient + Trip/TripUser/Drink types
   auth.ts              # signInWithGoogle, signOut, cleanAuthUrl
-  store.ts             # Zustand: session, authReady, trip, currentUser, tripUsers, drinks, offlineQueue, isOffline
+  profile.ts           # loadProfile (get-or-create), saveProfile, ageFromBirthYear
+  store.ts             # Zustand: session, authReady, profile, trip, currentUser, tripUsers, drinks, offlineQueue, isOffline
   utils.ts             # generateInviteCode, timeAgo, getOrCreateDeviceId, formatHour, hexToRgba
 constants/
   drinks.ts            # DRINK_CATEGORIES, CATEGORY_MAP, AVATAR_OPTIONS, AVATAR_BG_COLORS
 supabase/migrations/
   001_google_auth.sql  # user_id/owner_id columns, RLS policies, join_trip_by_code()
+  002_profiles.sql     # profiles table, own-row RLS, auto-create trigger on auth.users
 docs/
   GOOGLE_AUTH.md       # Google Cloud + Supabase dashboard setup
   DEPLOY.md            # Vercel deploy + env vars + PWA install
@@ -99,15 +102,28 @@ All styling uses `StyleSheet.create` (not NativeWind className). Gradients use `
 create table trips (id uuid primary key default gen_random_uuid(), name text not null, invite_code text unique not null, created_by uuid not null, owner_id uuid references auth.users(id) on delete cascade, created_at timestamptz default now(), active boolean default true);
 create table trip_users (id uuid primary key default gen_random_uuid(), trip_id uuid references trips(id) on delete cascade, display_name text not null, avatar_emoji text not null, user_id uuid references auth.users(id) on delete cascade, device_id text, joined_at timestamptz default now());
 create table drinks (id uuid primary key default gen_random_uuid(), trip_id uuid references trips(id) on delete cascade, user_id uuid references trip_users(id) on delete cascade, category text not null, name text, note text, logged_at timestamptz default now());
+create table profiles (id uuid primary key references auth.users(id) on delete cascade, display_name text not null default '', avatar_emoji text not null default '🦊', birth_year int, weight_kg numeric(5,1), height_cm int, sex text, created_at timestamptz default now(), updated_at timestamptz default now());
 ```
 
-Enable Realtime on all three tables in Supabase dashboard → Database → Replication.
+Enable Realtime on `trips`, `trip_users` and `drinks` in Supabase dashboard →
+Database → Replication. `profiles` doesn't need it — it's read once per session.
+
+**`profiles` vs `trip_users`.** `profiles` is one row per Google account and
+holds the *defaults* (nickname, avatar) plus private body stats. `trip_users` is
+one row per person per trip and is what the feed and leaderboard actually read —
+the profile only pre-fills it in `onboarding.tsx`, so changing your profile later
+does not rename you in trips you've already joined. `profiles` RLS is own-row
+only: trip-mates deliberately cannot read each other's weight.
+
+A trigger on `auth.users` (`handle_new_user`) creates the profile row at sign-up.
+`loadProfile()` in `lib/profile.ts` also creates one if it's missing, which is
+what covers accounts that existed before migration 002.
 
 ⚠️ **Two different `user_id`s.** `trip_users.user_id` → `auth.users` (the Google
 account). `drinks.user_id` → `trip_users` (the per-trip persona). They are not
 interchangeable; the `drinks` RLS policy joins through `trip_users` to bridge them.
 
-RLS is enabled on all three tables and every policy is scoped through
+RLS is enabled on all four tables. On the three trip tables every policy is scoped through
 `is_trip_member(trip_id)`, a SECURITY DEFINER function. It has to be SECURITY
 DEFINER: a `trip_users` policy that queried `trip_users` directly would recurse.
 
