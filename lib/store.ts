@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, Event, EventUser, Drink, DrinkInsert, Profile } from './supabase'
+import type { DrinkCategory } from '../constants/drinks'
 
 interface AppStore {
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -33,6 +34,17 @@ interface AppStore {
   drinks: Drink[]
   setDrinks: (drinks: Drink[]) => void
   addDrink: (drink: Drink) => void
+  /**
+   * Logs a drink into the active event: optimistic insert, then the network,
+   * falling back to the offline queue. Returns false if there's no active
+   * event to log into. Lives here so the log sheet and the Drinks tab share
+   * one implementation.
+   */
+  logDrink: (input: {
+    category: DrinkCategory
+    name?: string | null
+    note?: string | null
+  }) => Promise<boolean>
 
   // ── Offline queue ─────────────────────────────────────────────────────────
   offlineQueue: DrinkInsert[]
@@ -94,6 +106,49 @@ export const useStore = create<AppStore>()(
           if (exists) return state
           return { drinks: [drink, ...state.drinks] }
         }),
+
+      logDrink: async ({ category, name = null, note = null }) => {
+        const { event, currentUser, isOffline } = get()
+        if (!event || !currentUser) return false
+
+        const insert: DrinkInsert = {
+          event_id: event.id,
+          user_id: currentUser.id,
+          category,
+          name: name || null,
+          note: note || null,
+        }
+
+        const localId = `local-${Date.now()}`
+        get().addDrink({ ...insert, id: localId, logged_at: new Date().toISOString() })
+
+        if (isOffline) {
+          get().enqueueOffline(insert)
+          return true
+        }
+
+        // Swap the placeholder for the real row rather than just firing the
+        // insert. The realtime subscription will also deliver this row, and
+        // addDrink dedupes on id — so without the swap the feed shows the same
+        // drink twice, once as `local-…` and once as its real uuid.
+        const { data, error } = await supabase
+          .from('drinks')
+          .insert(insert)
+          .select()
+          .single<Drink>()
+
+        if (error || !data) {
+          get().enqueueOffline(insert)
+          return true
+        }
+
+        set(state => ({
+          drinks: state.drinks.some(d => d.id === data.id)
+            ? state.drinks.filter(d => d.id !== localId)
+            : state.drinks.map(d => (d.id === localId ? data : d)),
+        }))
+        return true
+      },
 
       // ── Offline queue ────────────────────────────────────────────────────
       offlineQueue: [],

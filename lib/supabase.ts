@@ -65,6 +65,15 @@ export type ProfilePatch = Partial<
   Pick<Profile, 'display_name' | 'avatar_emoji' | 'birth_year' | 'weight_kg' | 'height_cm' | 'sex'>
 >
 
+/** A saved "the usual" — account-scoped, see 006_drink_presets.sql. */
+export interface DrinkPreset {
+  id: string
+  user_id: string
+  name: string
+  category: DrinkCategory
+  created_at: string
+}
+
 export interface Drink {
   id: string
   event_id: string

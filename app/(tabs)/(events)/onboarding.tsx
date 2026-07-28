@@ -14,11 +14,12 @@ import {
 import { router, useLocalSearchParams } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import { SafeAreaView } from 'react-native-safe-area-context'
-import { supabase } from '../lib/supabase'
-import { useStore } from '../lib/store'
-import { generateInviteCode } from '../lib/utils'
-import { AVATAR_OPTIONS, AVATAR_BG_COLORS } from '../constants/drinks'
-import type { Event, EventUser } from '../lib/supabase'
+import { supabase } from '../../../lib/supabase'
+import { useStore } from '../../../lib/store'
+import { generateInviteCode } from '../../../lib/utils'
+import { AVATAR_OPTIONS, AVATAR_BG_COLORS } from '../../../constants/drinks'
+import { BackButton } from '../../../components/BackButton'
+import type { Event, EventUser } from '../../../lib/supabase'
 
 export default function OnboardingScreen() {
   const { mode } = useLocalSearchParams<{ mode: 'create' | 'join' }>()
@@ -96,7 +97,7 @@ export default function OnboardingScreen() {
         if (userErr) throw userErr
 
         setEvent(event, user)
-        router.replace('/(event)/feed')
+        router.replace('/feed')
       } else {
         // Join by code. RLS hides events you're not a member of, so this goes
         // through a SECURITY DEFINER function that does the lookup server-side.
@@ -132,7 +133,7 @@ export default function OnboardingScreen() {
         if (userErr) throw userErr
 
         setEvent(event, user)
-        router.replace('/(event)/feed')
+        router.replace('/feed')
       }
     } catch (e: any) {
       setError(e.message ?? 'Something went wrong. Try again.')
@@ -157,9 +158,7 @@ export default function OnboardingScreen() {
           >
             {/* Header */}
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                <Text style={styles.backBtnText}>‹</Text>
-              </TouchableOpacity>
+              <BackButton fallback="/" />
               <Text style={styles.headerTitle}>
                 {isCreate ? 'Set up your avatar' : 'Join an event'}
               </Text>

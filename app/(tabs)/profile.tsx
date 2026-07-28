@@ -12,12 +12,12 @@ import {
 } from 'react-native'
 import { router } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { useStore } from '../lib/store'
-import { signOut } from '../lib/auth'
-import { saveProfile, ageFromBirthYear } from '../lib/profile'
-import { AVATAR_OPTIONS } from '../constants/drinks'
-import type { Profile } from '../lib/supabase'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useStore } from '../../lib/store'
+import { signOut } from '../../lib/auth'
+import { saveProfile, ageFromBirthYear } from '../../lib/profile'
+import { AVATAR_OPTIONS } from '../../constants/drinks'
+import type { Profile } from '../../lib/supabase'
 
 type Sex = NonNullable<Profile['sex']>
 
@@ -36,6 +36,9 @@ function toNumber(input: string): number | null {
 }
 
 export default function ProfileScreen() {
+  const insets = useSafeAreaInsets()
+  const tabBarSpace = 80 + Math.max(0, insets.bottom - 20)
+
   const profile = useStore(s => s.profile)
   const profileError = useStore(s => s.profileError)
   const setProfile = useStore(s => s.setProfile)
@@ -147,7 +150,7 @@ export default function ProfileScreen() {
               supabase/migrations/002_profiles.sql in the Supabase SQL editor.
             </Text>
             <TouchableOpacity
-              onPress={() => router.back()}
+              onPress={() => router.replace('/')}
               style={styles.ghostBtn}
               activeOpacity={0.8}
             >
@@ -172,13 +175,10 @@ export default function ProfileScreen() {
         >
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.scrollContent}
+            contentContainerStyle={[styles.scrollContent, { paddingBottom: tabBarSpace + 24 }]}
             keyboardShouldPersistTaps="handled"
           >
             <View style={styles.header}>
-              <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                <Text style={styles.backBtnText}>‹</Text>
-              </TouchableOpacity>
               <Text style={styles.headerTitle}>Your profile</Text>
             </View>
 

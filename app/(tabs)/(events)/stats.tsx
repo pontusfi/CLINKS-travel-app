@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import {
   View,
   Text,
@@ -8,12 +8,14 @@ import {
   Share,
   Dimensions,
 } from 'react-native'
+import { router } from 'expo-router'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { LinearGradient } from 'expo-linear-gradient'
-import { useStore } from '../../lib/store'
-import { DRINK_CATEGORIES, DrinkCategory } from '../../constants/drinks'
-import { StatCard } from '../../components/StatCard'
-import { formatHour } from '../../lib/utils'
+import { useStore } from '../../../lib/store'
+import { DRINK_CATEGORIES, DrinkCategory } from '../../../constants/drinks'
+import { StatCard } from '../../../components/StatCard'
+import { formatHour } from '../../../lib/utils'
+import { EventNav } from '../../../components/EventNav'
 
 const SCREEN_WIDTH = Dimensions.get('window').width
 const CHART_WIDTH = SCREEN_WIDTH - 36 - 28 // screen - paddingH - card padding
@@ -29,6 +31,13 @@ export default function StatsScreen() {
   const event = useStore(s => s.event)
   const drinks = useStore(s => s.drinks)
   const eventUsers = useStore(s => s.eventUsers)
+
+
+  // The deleted (event) layout used to do this. Without it, opening /feed with
+  // no active event — a refresh on web, or a sign-out — renders nothing at all.
+  useEffect(() => {
+    if (!event) router.replace('/')
+  }, [event])
 
   const stats = useMemo(() => {
     if (!drinks.length || !eventUsers.length) return null
@@ -108,6 +117,8 @@ export default function StatsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.scrollContent, { paddingBottom: 120 + extraBottom }]}
         >
+          <EventNav />
+
           {/* Header */}
           <View style={styles.header}>
             <View>

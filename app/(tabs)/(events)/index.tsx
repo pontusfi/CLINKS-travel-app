@@ -19,16 +19,21 @@ import Animated, {
   withTiming,
   Easing,
 } from 'react-native-reanimated'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { useStore } from '../lib/store'
-import { supabase } from '../lib/supabase'
-import type { Event, EventUser } from '../lib/supabase'
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useStore } from '../../../lib/store'
+import { supabase } from '../../../lib/supabase'
+import type { Event, EventUser } from '../../../lib/supabase'
 
 const { width } = Dimensions.get('window')
 
 type EventEntry = { event: Event; user: EventUser }
 
 export default function HomeScreen() {
+  const insets = useSafeAreaInsets()
+  // The tab bar floats over the content, so every scrollable/bottom-anchored
+  // area has to reserve its height or the last row sits underneath it.
+  const tabBarSpace = 80 + Math.max(0, insets.bottom - 20)
+
   const event = useStore(s => s.event)
   const setEvent = useStore(s => s.setEvent)
   const session = useStore(s => s.session)
@@ -36,6 +41,8 @@ export default function HomeScreen() {
 
   const [events, setEvents] = useState<EventEntry[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
 
   const floatY = useSharedValue(0)
   const pulseDot = useSharedValue(1)
@@ -73,43 +80,67 @@ export default function HomeScreen() {
         return
       }
       setLoading(true)
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('event_users')
         .select('*, events(*)')
         .eq('user_id', userId)
       if (!active) return
+      // Surfacing this matters more than it looks: a failed query and "you have
+      // no events yet" both produce an empty list, so swallowing the error hides
+      // a broken database behind a perfectly friendly empty state.
+      if (error) {
+        setLoadError(error.message)
+        setEvents([])
+        setLoading(false)
+        return
+      }
       const entries: EventEntry[] = (data ?? [])
         .filter((row: any) => row.events?.active)
         .map((row: any) => ({ event: row.events as Event, user: row as EventUser }))
+      setLoadError('')
       setEvents(entries)
       setLoading(false)
     }
     load()
     return () => { active = false }
-  }, [session?.user?.id]))
-
-  const profileChip = (
-    <TouchableOpacity
-      onPress={() => router.push('/profile')}
-      style={styles.profileChip}
-      activeOpacity={0.7}
-    >
-      <Text style={styles.profileChipEmoji}>{profile?.avatar_emoji ?? '🙂'}</Text>
-      <Text style={styles.profileChipText} numberOfLines={1}>
-        {profile?.display_name || 'Profile'}
-      </Text>
-    </TouchableOpacity>
-  )
+  }, [session?.user?.id, reloadKey]))
 
   function enterEvent(entry: EventEntry) {
     setEvent(entry.event, entry.user)
-    router.replace('/(event)/feed')
+    router.push('/feed')
   }
 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator color="#9B5CFF" size="large" />
+      </View>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <View style={styles.container}>
+        <View style={[styles.blob, styles.blobTop]} />
+        <SafeAreaView style={[styles.safeArea, { paddingBottom: tabBarSpace + 10 }]}>
+          <View style={styles.center}>
+            <Text style={styles.errorTitle}>Couldn't load your events</Text>
+            <Text style={styles.errorBody}>{loadError}</Text>
+            <Text style={styles.errorHint}>
+              "permission denied for table …" means the database is missing its
+              grants — run supabase/migrations/004_grants.sql.
+            </Text>
+          </View>
+          <View style={styles.buttons}>
+            <TouchableOpacity
+              onPress={() => setReloadKey(k => k + 1)}
+              style={styles.ghostButton}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.ghostButtonText}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
       </View>
     )
   }
@@ -121,9 +152,7 @@ export default function HomeScreen() {
         <View style={[styles.blob, styles.blobTop]} />
         <View style={[styles.blob, styles.blobBottom]} />
 
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.heroHeader}>{profileChip}</View>
-
+        <SafeAreaView style={[styles.safeArea, { paddingBottom: tabBarSpace + 10 }]}>
           {/* Center content */}
           <View style={styles.center}>
             {/* Live pill */}
@@ -194,7 +223,7 @@ export default function HomeScreen() {
       <View style={[styles.blob, styles.blobTop]} />
       <View style={[styles.blob, styles.blobBottom]} />
 
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={[styles.safeArea, { paddingBottom: tabBarSpace + 10 }]}>
         <View style={styles.dashHeader}>
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={styles.dashTitle}>Your events</Text>
@@ -202,7 +231,6 @@ export default function HomeScreen() {
               {events.length} EVENT{events.length !== 1 ? 'S' : ''}
             </Text>
           </View>
-          {profileChip}
         </View>
 
         <ScrollView
@@ -351,33 +379,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
-  heroHeader: {
-    paddingTop: 8,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-  },
-  profileChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingLeft: 10,
-    paddingRight: 14,
-    paddingVertical: 7,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    maxWidth: 170,
-  },
-  profileChipEmoji: {
-    fontSize: 17,
-  },
-  profileChipText: {
-    fontFamily: 'SpaceGrotesk_Medium',
-    fontSize: 13,
-    color: '#B6B0C8',
-    flexShrink: 1,
-  },
   dashTitle: {
     fontFamily: 'SpaceGrotesk_Bold',
     fontSize: 28,
@@ -422,6 +423,26 @@ const styles = StyleSheet.create({
     fontSize: 9,
     color: '#9B5CFF',
     letterSpacing: 0.5,
+  },
+  errorTitle: {
+    fontFamily: 'SpaceGrotesk_Bold',
+    fontSize: 22,
+    color: '#F5F3FA',
+    textAlign: 'center',
+  },
+  errorBody: {
+    fontFamily: 'SpaceGrotesk',
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#FF5C6E',
+    textAlign: 'center',
+  },
+  errorHint: {
+    fontFamily: 'SpaceGrotesk',
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#6B6680',
+    textAlign: 'center',
   },
   // Shared buttons
   buttons: {

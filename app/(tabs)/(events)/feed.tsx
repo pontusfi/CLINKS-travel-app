@@ -8,6 +8,7 @@ import {
   Pressable,
   Alert,
 } from 'react-native'
+import { router } from 'expo-router'
 import { LinearGradient } from 'expo-linear-gradient'
 import * as Clipboard from 'expo-clipboard'
 import Animated, {
@@ -20,10 +21,11 @@ import Animated, {
 } from 'react-native-reanimated'
 import { BottomSheetModal } from '@gorhom/bottom-sheet'
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
-import { supabase, Drink, EventUser } from '../../lib/supabase'
-import { useStore } from '../../lib/store'
-import { FeedItem } from '../../components/FeedItem'
-import { LogDrinkSheet } from '../../components/LogDrinkSheet'
+import { supabase, Drink, EventUser } from '../../../lib/supabase'
+import { useStore } from '../../../lib/store'
+import { FeedItem } from '../../../components/FeedItem'
+import { EventNav } from '../../../components/EventNav'
+import { LogDrinkSheet } from '../../../components/LogDrinkSheet'
 
 export default function FeedScreen() {
   const insets = useSafeAreaInsets()
@@ -40,6 +42,13 @@ export default function FeedScreen() {
 
   const sheetRef = useRef<BottomSheetModal>(null)
   const [codeCopied, setCodeCopied] = useState(false)
+
+
+  // The deleted (event) layout used to do this. Without it, opening /feed with
+  // no active event — a refresh on web, or a sign-out — renders nothing at all.
+  useEffect(() => {
+    if (!event) router.replace('/')
+  }, [event])
 
   // FAB glow animation
   const fabGlow = useSharedValue(0.45)
@@ -136,6 +145,8 @@ export default function FeedScreen() {
       )}
 
       <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <EventNav />
+
         {/* Header */}
         <View style={styles.header}>
           <View>

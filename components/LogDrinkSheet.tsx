@@ -1,5 +1,5 @@
-import { forwardRef, useState, useCallback, useRef } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native'
+import { forwardRef, useState, useCallback, useEffect } from 'react'
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
 import BottomSheet, {
   BottomSheetModal,
@@ -10,7 +10,8 @@ import BottomSheet, {
 import { DrinkCategoryPicker } from './DrinkCategoryPicker'
 import { DrinkCategory, CATEGORY_MAP } from '../constants/drinks'
 import { useStore } from '../lib/store'
-import { supabase, Drink } from '../lib/supabase'
+import { listPresets } from '../lib/presets'
+import type { DrinkPreset } from '../lib/supabase'
 
 interface Props {
   onDrinkLogged?: () => void
@@ -22,11 +23,21 @@ export const LogDrinkSheet = forwardRef<BottomSheetModal, Props>(
     const [drinkName, setDrinkName] = useState('')
     const [note, setNote] = useState('')
 
-    const event = useStore(s => s.event)
-    const currentUser = useStore(s => s.currentUser)
-    const addDrink = useStore(s => s.addDrink)
-    const isOffline = useStore(s => s.isOffline)
-    const enqueueOffline = useStore(s => s.enqueueOffline)
+    const logDrink = useStore(s => s.logDrink)
+    const session = useStore(s => s.session)
+
+    const [presets, setPresets] = useState<DrinkPreset[]>([])
+    useEffect(() => {
+      const userId = session?.user?.id
+      if (!userId) return
+      let active = true
+      // Presets are a convenience; a failure here shouldn't stop you logging
+      // the long way round, so the sheet just renders without them.
+      listPresets(userId)
+        .then(rows => { if (active) setPresets(rows) })
+        .catch(() => {})
+      return () => { active = false }
+    }, [session?.user?.id])
 
     const renderBackdrop = useCallback(
       (props: any) => (
@@ -50,42 +61,17 @@ export const LogDrinkSheet = forwardRef<BottomSheetModal, Props>(
     }
 
     async function handleLog() {
-      if (!event || !currentUser) return
-
-      const cat = CATEGORY_MAP[category]
-      const now = new Date().toISOString()
-
-      const optimistic: Drink = {
-        id: `local-${Date.now()}`,
-        event_id: event.id,
-        user_id: currentUser.id,
-        category,
-        name: drinkName || null,
-        note: note || null,
-        logged_at: now,
-      }
-
-      addDrink(optimistic)
+      const ok = await logDrink({ category, name: drinkName, note })
+      if (!ok) return
       close()
       onDrinkLogged?.()
+    }
 
-      const insert = {
-        event_id: event.id,
-        user_id: currentUser.id,
-        category,
-        name: drinkName || null,
-        note: note || null,
-      }
-
-      if (isOffline) {
-        enqueueOffline(insert)
-        return
-      }
-
-      const { error } = await supabase.from('drinks').insert(insert)
-      if (error) {
-        enqueueOffline(insert)
-      }
+    async function handleLogPreset(preset: DrinkPreset) {
+      const ok = await logDrink({ category: preset.category, name: preset.name })
+      if (!ok) return
+      close()
+      onDrinkLogged?.()
     }
 
     return (
@@ -98,6 +84,35 @@ export const LogDrinkSheet = forwardRef<BottomSheetModal, Props>(
       >
         <BottomSheetView style={styles.content}>
           <Text style={styles.title}>What are you drinking?</Text>
+
+          {presets.length > 0 && (
+            <View style={{ gap: 8 }}>
+              <Text style={styles.presetLabel}>YOUR USUALS</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.presetRow}
+                keyboardShouldPersistTaps="handled"
+              >
+                {presets.map(preset => {
+                  const cat = CATEGORY_MAP[preset.category] ?? CATEGORY_MAP.other
+                  return (
+                    <TouchableOpacity
+                      key={preset.id}
+                      onPress={() => handleLogPreset(preset)}
+                      style={styles.presetChip}
+                      activeOpacity={0.75}
+                    >
+                      <Text style={styles.presetChipEmoji}>{cat.emoji}</Text>
+                      <Text style={styles.presetChipText} numberOfLines={1}>
+                        {preset.name}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </ScrollView>
+            </View>
+          )}
 
           <DrinkCategoryPicker selected={category} onSelect={setCategory} />
 
@@ -153,6 +168,38 @@ const styles = StyleSheet.create({
     fontFamily: 'SpaceGrotesk_Bold',
     fontSize: 22,
     color: '#F5F3FA',
+  },
+  presetLabel: {
+    fontFamily: 'SpaceMono',
+    fontSize: 11,
+    color: '#6B6680',
+    letterSpacing: 0.8,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 4,
+  },
+  presetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 999,
+    backgroundColor: 'rgba(155,92,255,0.14)',
+    borderWidth: 1,
+    borderColor: 'rgba(155,92,255,0.3)',
+    maxWidth: 190,
+  },
+  presetChipEmoji: {
+    fontSize: 15,
+  },
+  presetChipText: {
+    fontFamily: 'SpaceGrotesk_Medium',
+    fontSize: 14,
+    color: '#F5F3FA',
+    flexShrink: 1,
   },
   input: {
     height: 46,

@@ -50,22 +50,28 @@ app/
   _layout.tsx          # Root: GestureHandlerRootView + BottomSheetModalProvider + fonts + NetInfo + AuthGate
   +html.tsx            # Web-only HTML shell (PWA manifest, theme colour, Apple meta). Needs web.output="static"
   sign-in.tsx          # Google sign-in gate — shown whenever there's no session
-  index.tsx            # Events dashboard / hero empty state (Create / Join)
-  onboarding.tsx       # Onboarding — ?mode=create|join search param
-  profile.tsx          # Account profile — nickname, avatar, body stats, sign out
-  (event)/
-    _layout.tsx        # Custom tab bar (Feed | Stats), redirects to / if store.event is null
-    feed.tsx           # Live feed + FAB + real-time Supabase subscription
-    stats.tsx          # Leaderboard + night arc chart + category breakdown
+  (tabs)/
+    _layout.tsx        # THE app-wide bottom nav: Profile | Events | Drinks
+    profile.tsx        # Account profile — nickname, avatar, body stats, sign out
+    drinks.tsx         # Drink presets — save "the usual", one tap to log it
+    (events)/
+      _layout.tsx      # Stack, so feed/stats/onboarding push *inside* the tab
+      index.tsx        # Events dashboard / hero empty state (Create / Join)  → "/"
+      feed.tsx         # Live feed + FAB + real-time Supabase subscription    → "/feed"
+      stats.tsx        # Leaderboard + night arc + category breakdown         → "/stats"
+      onboarding.tsx   # Create / join — ?mode=create|join search param
 components/
-  LogDrinkSheet.tsx    # BottomSheetModal for logging drinks
+  LogDrinkSheet.tsx    # BottomSheetModal for logging drinks (+ preset quick-picks)
   DrinkCategoryPicker.tsx
+  EventNav.tsx         # Back button + Feed/Stats segmented control
+  BackButton.tsx       # Back with a fallback route — router.back() no-ops on a fresh load
   FeedItem.tsx
   StatCard.tsx
 lib/
   supabase.ts          # createClient + Event/EventUser/Drink/Profile types
   auth.ts              # signInWithGoogle, signOut, cleanAuthUrl
   profile.ts           # loadProfile (get-or-create), saveProfile, ageFromBirthYear
+  presets.ts           # listPresets, createPreset, deletePreset
   store.ts             # Zustand: session, authReady, profile, event, currentUser, eventUsers, drinks, offlineQueue, isOffline
   utils.ts             # generateInviteCode, timeAgo, getOrCreateDeviceId, formatHour, hexToRgba
 constants/
@@ -74,10 +80,53 @@ supabase/migrations/
   001_google_auth.sql  # user_id/owner_id columns, RLS policies, join-by-code RPC
   002_profiles.sql     # profiles table, grants, own-row RLS, auto-create trigger
   003_rename_trip_to_event.sql  # trips→events, trip_users→event_users, trip_id→event_id
+  004_grants.sql       # table + function grants to `authenticated` (see grants note below)
+  005_fix_select_policies.sql  # let owners see their own event / membership row
+  006_drink_presets.sql # drink_presets table, grants, own-row RLS
 docs/
   GOOGLE_AUTH.md       # Google Cloud + Supabase dashboard setup
   DEPLOY.md            # Vercel deploy + env vars + PWA install
 ```
+
+## Navigation
+
+Three permanent bottom tabs — **Profile | Events | Drinks** — defined in
+`app/(tabs)/_layout.tsx`. Everything a signed-in user can reach lives under
+`(tabs)`, so the bar never disappears mid-flow.
+
+The key structural decision: the feed, stats and create/join screens are a
+**Stack inside the Events tab** (`app/(tabs)/(events)/`), not routes pushed at
+the root. Pushing at the root would cover the tab bar. Being a stack is also
+what makes `router.back()` meaningful on those screens.
+
+Both `(tabs)` and `(events)` are groups, so they contribute nothing to the URL:
+the routes stay `/`, `/feed`, `/stats`, `/onboarding`, `/drinks`, `/profile`.
+
+Feed and Stats used to be their own bottom tab bar. They're a segmented control
+in `EventNav` now — the bottom of the screen belongs to the app-wide nav.
+
+⚠️ **`router.back()` alone isn't enough on web.** Open `/feed` directly, or
+refresh on it, and there's no history entry — `back()` silently does nothing and
+the button looks broken. `BackButton` takes a `fallback` route and uses
+`router.canGoBack()` to choose. Use it rather than a bare `router.back()`.
+
+⚠️ **The tab bar is `position: absolute`,** so it floats over content. Any
+scrollable or bottom-anchored area has to reserve `80 + max(0, insets.bottom - 20)`
+or its last row hides underneath.
+
+## Drink presets
+
+Account-scoped saved drinks (`drink_presets`), surfaced in two places: the
+Drinks tab to manage them, and a horizontal quick-pick row at the top of
+`LogDrinkSheet` where you're already logging. Logging a preset writes an
+ordinary `drinks` row — nothing downstream knows presets exist.
+
+Logging goes through **`store.logDrink()`**, not through the components. It
+owns the optimistic insert, the local→server row swap and the offline-queue
+fallback, so the sheet and the Drinks tab can't drift apart. The swap matters:
+the realtime subscription also delivers the inserted row, and `addDrink` dedupes
+on id, so without replacing the `local-…` placeholder the feed shows the drink
+twice.
 
 ## Design tokens
 
@@ -104,6 +153,7 @@ create table events (id uuid primary key default gen_random_uuid(), name text no
 create table event_users (id uuid primary key default gen_random_uuid(), event_id uuid references events(id) on delete cascade, display_name text not null, avatar_emoji text not null, user_id uuid references auth.users(id) on delete cascade, device_id text, joined_at timestamptz default now());
 create table drinks (id uuid primary key default gen_random_uuid(), event_id uuid references events(id) on delete cascade, user_id uuid references event_users(id) on delete cascade, category text not null, name text, note text, logged_at timestamptz default now());
 create table profiles (id uuid primary key references auth.users(id) on delete cascade, display_name text not null default '', avatar_emoji text not null default '🦊', birth_year int, weight_kg numeric(5,1), height_cm int, sex text, created_at timestamptz default now(), updated_at timestamptz default now());
+create table drink_presets (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id) on delete cascade, name text not null, category text not null, created_at timestamptz default now());
 ```
 
 Enable Realtime on `events`, `event_users` and `drinks` in Supabase dashboard →
@@ -116,11 +166,17 @@ the profile only pre-fills it in `onboarding.tsx`, so changing your profile late
 does not rename you in events you've already joined. `profiles` RLS is own-row
 only: fellow attendees deliberately cannot read each other's weight.
 
-⚠️ **New tables need an explicit `grant`, not just RLS policies.** GRANT decides
-whether `authenticated` may touch the table at all; RLS decides which rows. A
-table with perfect policies and no grant fails with `permission denied for table
-…` before any policy runs. The original three tables inherited grants from
-Supabase's default privileges; `profiles` did not, so 002 grants them by hand.
+⚠️ **Grants and RLS are separate gates, and both must open.** GRANT decides
+whether a role may touch the table at all — missing it fails with `permission
+denied for table …` (42501) *before* any policy runs. RLS decides which rows —
+missing it shows up as empty results or a policy-violation error. They fail
+differently; don't debug one while looking at the other.
+
+Every table needed an explicit grant to `authenticated` (`004_grants.sql`). The
+pre-auth app ran as `anon`, which had grants from Supabase's default privileges,
+so nothing was obviously wrong until requiring sign-in switched every request to
+`authenticated`. Keep grants mirroring the policies: no DELETE grant on a table
+with no delete policy.
 
 A trigger on `auth.users` (`handle_new_user`) creates the profile row at sign-up.
 `loadProfile()` in `lib/profile.ts` also creates one if it's missing, which is
@@ -133,6 +189,15 @@ interchangeable; the `drinks` RLS policy joins through `event_users` to bridge t
 RLS is enabled on all four tables. On the three event tables every policy is scoped through
 `is_event_member(event_id)`, a SECURITY DEFINER function. It has to be SECURITY
 DEFINER: an `event_users` policy that queried `event_users` directly would recurse.
+
+⚠️ **`.insert(...).select()` needs a SELECT policy that covers the new row.**
+PostgREST's `.select()` is a RETURNING clause, and RETURNING applies the select
+policy to the row just written. A membership-only policy fails here: when you
+create an event you aren't a member of it yet, and `is_event_member()` is STABLE
+so it can't see the membership row being inserted in the same statement either.
+Hence the `or owner_id = auth.uid()` / `or user_id = auth.uid()` arms added in
+005. Symptom is `new row violates row-level security policy`, which reads like
+the INSERT was rejected even though it's the read-back that failed.
 
 Because `events` SELECT is restricted to events you're already in, joining by code
 cannot be a plain client query — it goes through the `join_event_by_code()` RPC.
